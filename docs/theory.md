@@ -4,6 +4,7 @@
 1. [USRP](#usrp)
     - [What is USRP](#what-is-usrp)
     - [USRP B210 Technical Specifications](#usrp-b210-technical-specifications)
+    - [USRP B210 Ubuntu Installation Guide UHD API](#usrp-b210-ubuntu-installation-guide-uhd-api)
     - [](#)
 
 
@@ -110,3 +111,146 @@ The **USRP B210** is a fully integrated, single-board, Universal Software Radio 
 * [Ettus Research - USRP B200/B210 Datasheet](https://www.ettus.com/wp-content/uploads/2019/01/b200-b210_spec_sheet.pdf)
 * [Digilent - NI Ettus USRP B210 Product Page](https://digilent.com/shop/ni-ettus-usrp-b210-2x2-70mhz-6ghz-sdr-cognitive-radio/)
 * [Ettus Knowledge Base - B200/B210 Features](https://kb.ettus.com/B200/B210/B200mini/B205mini)
+
+
+### USRP B210 Ubuntu Installation Guide UHD API
+
+This guide details the installation of the **Universal Hardware Driver (UHD)** for the **USRP B210** on Ubuntu Linux. The UHD provides the host driver and API (C++/Python) required to communicate with Ettus Research SDR devices.
+
+#### System Prerequisites
+
+| Component | Requirement |
+| :--- | :--- |
+| **Operating System** | Ubuntu 20.04 LTS or 22.04 LTS (Recommended) |
+| **Interface** | USB 3.0 Port (Required for high bandwidth) |
+| **Privileges** | Root/Sudo access required for installation |
+| **Internet** | Required for downloading packages and FPGA images |
+
+---
+
+#### Option 1: Binary Installation (Recommended)
+
+The easiest method using the official Ettus Research Personal Package Archive (PPA). This provides stable pre-compiled binaries.
+
+1.  **Update Repositories and Add PPA**
+    ```bash
+    sudo apt update
+    sudo apt install software-properties-common
+    sudo add-apt-repository ppa:ettusresearch/uhd
+    sudo apt update
+    ```
+
+2.  **Install UHD Host and Libraries**
+    ```bash
+    # Install driver, development headers, and utilities
+    sudo apt install libuhd-dev uhd-host
+    ```
+
+---
+
+#### Option 2: Building from Source (Advanced)
+
+Recommended if you need a specific version, debugging symbols, or RFNoC support.
+
+1.  **Install Build Dependencies**
+    ```bash
+    sudo apt install autoconf automake build-essential ccache cmake cpufrequtils \
+    doxygen ethtool g++ git inetutils-tools libboost-all-dev libncurses5 \
+    libncurses5-dev libusb-1.0-0 libusb-1.0-0-dev libusb-dev python3-dev \
+    python3-mako python3-numpy python3-requests python3-setuptools python3-scipy
+    ```
+
+2.  **Clone and Build UHD**
+    ```bash
+    # Clone the repository
+    git clone [https://github.com/EttusResearch/uhd.git](https://github.com/EttusResearch/uhd.git)
+    cd uhd
+    
+    # Checkout the desired tag (e.g., v4.6.0.0) or stick to master
+    git checkout v4.6.0.0 
+
+    # Create build directory
+    cd host
+    mkdir build
+    cd build
+
+    # Configure and Compile
+    cmake ../
+    make -j$(nproc)
+    make test
+    sudo make install
+    sudo ldconfig
+    ```
+
+---
+
+#### Post-Installation Configuration (Required)
+
+These steps are necessary for both binary and source installations to ensure the B210 is recognized and functional.
+
+1.  **Download FPGA Images**
+    The USRP B210 requires specific FPGA firmware images to operate.
+    ```bash
+    sudo uhd_images_downloader
+    ```
+
+2.  **Configure USB Permissions (Udev Rules)**
+    Allow non-root users to access the USRP device via USB.
+    ```bash
+    # Copy the rules file to the system rules directory
+    # Note: Path may vary slightly; if not found, check /usr/lib/uhd/utils/
+    sudo cp /usr/share/uhd/utils/uhd-usrp.rules /etc/udev/rules.d/
+    
+    # Reload udev rules
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
+    ```
+
+---
+
+#### Verification
+
+1.  **Connect the Device**
+    Plug the USRP B210 into a **USB 3.0** port.
+
+2.  **Run Discovery Tool**
+    ```bash
+    uhd_find_devices
+    ```
+    *Expected Output:*
+    ```text
+    --------------------------------------------------
+    -- UHD Device 0
+    --------------------------------------------------
+    Device Address:
+        serial: 316B...
+        name: MyB210
+        product: B210
+        type: b200
+    ```
+
+3.  **Probe Device Capabilities**
+    This loads the FPGA image and reports internal specifications.
+    ```bash
+    uhd_usrp_probe
+    ```
+
+---
+
+#### Common Troubleshooting
+
+| Issue | Solution |
+| :--- | :--- |
+| **"No UHD Devices Found"** | Ensure USB 3.0 connection; Verify udev rules are applied; Re-plug device. |
+| **"Loading FPGA image... failed"** | Run `sudo uhd_images_downloader` again; Check power supply (if not bus-powered). |
+| **"USB 2.0 detected"** | B210 prefers USB 3.0. If using 2.0, bandwidth is limited and external power is required. |
+
+---
+
+#### Sources
+* [Ettus Knowledge Base - Building and Installing UHD on Linux](https://kb.ettus.com/Building_and_Installing_the_USRP_Open-Source_Toolchain_(UHD_and_GNU_Radio)_on_Linux)
+* [Ettus GitHub Repository - UHD](https://github.com/EttusResearch/uhd)
+* [Ettus Manual - Binary Installation](https://files.ettus.com/manual/page_install.html)
+
+#### Related Video Resource
+* [USRP B210 & B200 Installation Guide](https://www.youtube.com/watch?v=ObzWYGvsGmI)
