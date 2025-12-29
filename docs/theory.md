@@ -9,7 +9,7 @@
 ---
 ## USRP
 sdffsags
-### What is USRP?
+### What is USRP ?
 
 **USRP** stands for **Universal Software Radio Peripheral**. It is a flexible and widely used family of **Software-Defined Radio (SDR)** hardware platforms designed and originally developed by **Ettus Research** (now a brand of **National Instruments**).
 
