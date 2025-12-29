@@ -1,15 +1,15 @@
-# My Theory Documentation
+# Documentation
 
 ## Table of Contents
-1. [Introduction](#introduction)
-2. [Theoretical Background](#theoretical-background)
+3. [USRP](#usrp)
+    - [What is USRP ?](#what-is-usrp-?)
+    - [](#data-sources)
 3. [Methodology Details](#methodology-details)
     - [The Algorithm](#the-algorithm)
     - [Data Sources](#data-sources)
-4. [Results and Conclusion](#results-and-conclusion)
 
 ---
-
+## USRP
 ## Introduction
 This is the descriptive page for the introduction. Here you explain the basics.
 
