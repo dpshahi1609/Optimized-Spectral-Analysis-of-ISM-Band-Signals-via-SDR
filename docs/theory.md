@@ -2,7 +2,7 @@
 
 ## Table of Contents
 1. [USRP](#usrp)
-    - [What is USRP ?](#what-is-usrp-?)
+    - [What is USRP](#what-is-usrp)
     - [USRP B210 Technical Specifications](#usrp-b210-technical-specifications)
     - [](#)
 
@@ -11,7 +11,7 @@
 ## USRP
 sssdsg
 
-### What is USRP ?
+### What is USRP
 
 **USRP** stands for **Universal Software Radio Peripheral**. It is a flexible and widely used family of **Software-Defined Radio (SDR)** hardware platforms designed and originally developed by **Ettus Research** (now a brand of **National Instruments**).
 
