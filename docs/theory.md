@@ -12,7 +12,7 @@
 
 ---
 ## USRP
-sssdsg
+
 
 ### What is USRP
 
@@ -279,9 +279,6 @@ Mathematically, the received signal is shifted from $f_c$ down to $0$ Hz (DC). B
 ---
 
 #### 2. Sampling Theorem: Bandwidth vs. Max Frequency
-
-**The User's Premise:**
-> "Sampling theorem state that we need to sample at twice of maximum frequency content, it is not realated to B.W. of signal."
 
 **Clarification:**
 The standard **Nyquist-Shannon Sampling Theorem** ($F_s > 2 f_{max}$) applies strictly to **Baseband Real Signals** where the bandwidth extends from 0 to $f_{max}$.
