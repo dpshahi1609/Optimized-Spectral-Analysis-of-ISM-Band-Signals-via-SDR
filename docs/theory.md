@@ -19,6 +19,7 @@
     - [STFT Formulas](#stft-formulas)
     - [Numerical Example](#numerical-example)
     - [The Spectrogram](#the-spectrogram)
+    - [Spectral Leakage and Frequency Resolution](#spectral-leakage-and-frequency-resolution)
    
 
    
@@ -783,3 +784,73 @@ The spectrogram provides a "time-frequency" view of a signal, allowing us to see
     * It reveals the trade-off between time and frequency resolution: a wide window (long time duration) gives narrow frequency bands (good frequency resolution) but blurs time details (poor time resolution), and vice versa.
 
 > **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 10, Section 10.3, pp. 817-819.
+
+### Spectral Leakage and Frequency Resolution
+
+#### 1. Spectral Leakage
+
+**Definition:**
+Spectral leakage is the phenomenon where energy from a signal at a specific frequency "leaks" into adjacent frequencies in the spectrum. This "smearing" of spectral energy makes it difficult to distinguish weak signals in the presence of strong ones.
+
+**Why it happens:**
+In practical spectral analysis, we cannot analyze an infinite-duration signal. We must limit the signal to a finite duration using a **window** sequence $w[n]$. This operation in the time domain is a multiplication:
+
+$$v[n] = x[n]w[n]$$
+
+where $x[n]$ is the signal and $v[n]$ is the windowed segment.
+
+According to the **Modulation (or Windowing) Theorem**, multiplication in the time domain corresponds to **periodic convolution** in the frequency domain. The Fourier transform of the windowed signal, $V(e^{j\omega})$, is the convolution of the signal's spectrum $X(e^{j\theta})$ and the window's spectrum $W(e^{j\omega})$:
+
+$$V(e^{j\omega}) = \frac{1}{2\pi} \int_{-\pi}^{\pi} X(e^{j\theta})W(e^{j(\omega-\theta)}) d\theta$$
+
+Ideally, the window's spectrum $W(e^{j\omega})$ would be an impulse (delta function), which would perfectly reproduce $X(e^{j\omega})$. However, finite-duration windows have a continuous spectrum consisting of a **main lobe** and **side lobes**.
+* When the window's spectrum is convolved with the signal's spectral peaks (impulses), the **side lobes** of the window cause the energy to spread (leak) into frequencies far away from the center frequency.
+
+> **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 10, Section 10.1, Eq. (10.2), and Section 10.2.1 "The Effect of Windowing", pp. 795, 797-800.
+
+---
+
+#### 2. Frequency Resolution
+
+**Definition:**
+Frequency resolution is the ability to resolve (distinguish) two distinct sinusoidal signal components that are closely spaced in frequency.
+
+**How it works:**
+Resolution is determined primarily by the **width of the main lobe** of the window's spectrum $W(e^{j\omega})$.
+* If two frequency components, $\omega_0$ and $\omega_1$, are very close to each other, the main lobes of the window centered at these frequencies will overlap.
+* If the overlap is significant, the two distinct peaks may merge into a single peak in the resulting spectrum $|V(e^{j\omega})|$, making it impossible to tell that there are two separate signals.
+* To resolve two frequencies, the difference $|\omega_1 - \omega_0|$ must generally be larger than the width of the main lobe.
+
+> **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 10, Section 10.2.2 "Properties of the Windows", p. 800.
+
+---
+
+#### 3. The Trade-off
+
+There is a fundamental trade-off between minimizing spectral leakage and maximizing frequency resolution. This is controlled by the shape and length of the window $w[n]$.
+
+#### The Conflict
+1.  **Main Lobe Width (Resolution):** To distinguish close frequencies, we need a **narrow main lobe**.
+2.  **Side Lobe Amplitude (Leakage):** To prevent strong signals from masking weak ones (leakage), we need **low amplitude side lobes**.
+
+#### Comparison of Windows
+* **Rectangular Window:**
+    * Has the **narrowest main lobe** for a given length $L$ (approximate width $\Delta_{ml} = 4\pi/L$).
+    * **Best Frequency Resolution**.
+    * Has the **highest side lobes** (the first side lobe is only about 13 dB down from the main peak).
+    * **Worst Spectral Leakage**.
+
+* **Tapered Windows (e.g., Hamming, Hann, Bartlett):**
+    * These windows taper smoothly to zero at the edges, which reduces the discontinuities.
+    * This **reduces side lobe levels** significantly (e.g., Hamming side lobes are ~41 dB down).
+    * **Low Spectral Leakage**.
+    * However, this comes at the cost of a **wider main lobe** (approximate width $\Delta_{ml} = 8\pi/L$ for Hamming/Hann).
+    * **Poorer Frequency Resolution** (for the same window length).
+
+#### Summary of Trade-off
+You cannot optimize both simultaneously simply by changing the window shape.
+* If you choose a window to reduce leakage (tapered), you widen the main lobe and lose resolution.
+* If you choose a window to improve resolution (rectangular), you raise the side lobes and increase leakage.
+* The **Kaiser Window** is a special window that includes a parameter $\beta$ to allow the user to continuously trade off between main-lobe width and side-lobe amplitude.
+
+> **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 10, Section 10.2.2, pp. 800-801; Chapter 7, Section 7.5.1, pp. 535-538.
