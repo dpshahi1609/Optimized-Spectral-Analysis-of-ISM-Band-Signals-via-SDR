@@ -2,17 +2,38 @@ import uhd
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from scipy.signal import lfilter, get_window, kaiser_beta
+from scipy.signal import lfilter, get_window
 
 # ==========================================
 # 1. PARAMETERS & CONFIGURATION
 # ==========================================
 WINDOW_TYPE = 'kaiser' 
-TARGET_ATTENUATION_DB = 74.0
+TARGET_ATTENUATION_DB = 78.0
 TARGET_RESOLUTION_HZ = 25000.0 
 
+DC_BLOCKER_CUTOFF_HZ = 25000.0 
+
 # ==========================================
-# 2. USRP B210 HARDWARE SETUP
+# 2. HELPER: DYNAMIC FILTER CALCULATIONS
+# ==========================================
+def calculate_optim_alpha(cutoff_hz, fs):
+    if fs <= 0: return 0.99 
+    
+    alpha = 1.0 - (2.0 * np.pi * cutoff_hz / fs)
+    
+    return max(0.0, min(0.999999, alpha))
+
+def calculate_settling_samples(alpha):
+    if alpha >= 1.0 or alpha <= 0.0: return 1000 
+    
+    tau = -1.0 / np.log(alpha)
+    
+    n_discard = int(np.ceil(5 * tau))
+    
+    return n_discard
+
+# ==========================================
+# 3. USRP B210 HARDWARE SETUP
 # ==========================================
 def setup_usrp(fc, fs, gain):
     print(f"[INFO] Connecting to USRP B210...")
@@ -38,7 +59,7 @@ def setup_usrp(fc, fs, gain):
     return usrp
 
 # ==========================================
-# 3. CAPTURE LOGIC
+# 4. CAPTURE LOGIC
 # ==========================================
 def capture_samples(usrp_dev, duration, fs):
     num_samps_target = int(np.ceil(duration * fs))
@@ -86,17 +107,30 @@ def capture_samples(usrp_dev, duration, fs):
     return full_data
 
 # ==========================================
-# 4. SIGNAL PROCESSING: DC BLOCKER
+# 5. SIGNAL PROCESSING: DYNAMIC DC BLOCKER
 # ==========================================
-def apply_dc_blocker(samples, alpha=0.995):
-    print("[INFO] Applying DC Offset Removal...")
+def apply_dc_blocker(samples, fs):
+    alpha = calculate_optim_alpha(DC_BLOCKER_CUTOFF_HZ, fs)
+    
+    n_discard = calculate_settling_samples(alpha)
+    
+    print(f"[INFO] DC Blocker Configured:")
+    print(f"       -> Target Cutoff: {DC_BLOCKER_CUTOFF_HZ/1000} kHz")
+    print(f"       -> Calculated Alpha: {alpha:.5f}")
+    print(f"       -> Discarding First: {n_discard} samples (Settling Time)")
+    
+    if len(samples) < n_discard + 100:
+        print("[WARN] Data too short for this filter configuration!")
+        return samples 
+
     b = [1, -1]
     a = [1, -alpha]
     filtered = lfilter(b, a, samples)
-    return filtered[1000:] if len(filtered) > 1000 else filtered
+    
+    return filtered[n_discard:]
 
 # ==========================================
-# 5. VISUALIZATION: TIME DOMAIN
+# 6. VISUALIZATION: TIME DOMAIN
 # ==========================================
 def plot_time_domain(iq_data, fs, label):
     decimation = 100 
@@ -113,48 +147,29 @@ def plot_time_domain(iq_data, fs, label):
     plt.show()
 
 # ==========================================
-# 6. VISUALIZATION: STFT
+# 7. VISUALIZATION: STFT
 # ==========================================
 def compute_and_plot_block_stft(data, fs, fc, label):
-    print("[INFO] Computing STFT with Optimized Kaiser...")
+    print("[INFO] Computing STFT...")
     
     Asl = TARGET_ATTENUATION_DB
     
-    if WINDOW_TYPE == 'kaiser':
-        if Asl > 60:
-            beta_val = 0.12438 * (Asl + 6.3)
-        elif Asl > 13.26:
-            beta_val = 0.76609 * (Asl - 13.26)**0.4 + 0.09834 * (Asl - 13.26)
-        else:
-            beta_val = 0.0
+    if Asl > 60:
+        beta_val = 0.12438 * (Asl + 6.3)
+    elif Asl > 13.26:
+        beta_val = 0.76609 * (Asl - 13.26)**0.4 + 0.09834 * (Asl - 13.26)
     else:
-        beta_val = 0 
+        beta_val = 0.0
 
-    if WINDOW_TYPE == 'kaiser':
-        delta_ml = 2 * np.pi * (TARGET_RESOLUTION_HZ / fs)
-        
-        numerator = 24 * np.pi * (Asl + 12)
-        denominator = 155 * delta_ml
-        n_fft_calc = (numerator / denominator) + 1
-        
-        n_fft = int(np.ceil(n_fft_calc))
-        
-        if n_fft % 2 != 0: n_fft += 1
-    else:
-        n_fft = int(fs / TARGET_RESOLUTION_HZ)
+    delta_ml = 2 * np.pi * (TARGET_RESOLUTION_HZ / fs)
+    numerator = 24 * np.pi * (Asl + 12)
+    denominator = 155 * delta_ml
+    n_fft_calc = (numerator / denominator) + 1
+    n_fft = int(np.ceil(n_fft_calc))
+    if n_fft % 2 != 0: n_fft += 1
 
     hop_length = n_fft // 2
-    
-    if WINDOW_TYPE == 'kaiser':
-        window = np.kaiser(n_fft, beta=beta_val)
-        win_str = f"Kaiser(beta={beta_val:.2f})"
-    else:
-        window = get_window(WINDOW_TYPE, n_fft)
-        win_str = WINDOW_TYPE
-
-    print(f"[INFO] Asl: {Asl}dB | Beta: {beta_val:.2f}")
-    print(f"[INFO] FFT Size: {n_fft} (Increased to maintain resolution)")
-    print(f"[INFO] Target Res: {TARGET_RESOLUTION_HZ/1000} kHz")
+    window = np.kaiser(n_fft, beta=beta_val)
 
     n_samples = len(data)
     n_frames = (n_samples - n_fft) // hop_length + 1
@@ -168,13 +183,10 @@ def compute_and_plot_block_stft(data, fs, fc, label):
     for i in range(n_frames):
         start = i * hop_length
         end = start + n_fft
-        
         chunk = data[start:end]
-        
         windowed = chunk * window
         fft_res = np.fft.fft(windowed)
         fft_shifted = np.fft.fftshift(fft_res)
-        
         mag_db = 20 * np.log10(np.abs(fft_shifted) + 1e-12)
         spectrogram_data[:, i] = mag_db
 
@@ -191,14 +203,14 @@ def compute_and_plot_block_stft(data, fs, fc, label):
                interpolation='nearest')
 
     plt.colorbar(label='Power (dB)')
-    plt.title(f"Spectrogram | {label}\nBeta: {beta_val:.2f} | Res: {TARGET_RESOLUTION_HZ/1000} kHz") 
+    plt.title(f"Spectrogram | {label}\nRes: {TARGET_RESOLUTION_HZ/1000} kHz | Cutoff: {DC_BLOCKER_CUTOFF_HZ/1000} kHz") 
     plt.xlabel("Time (s)")
     plt.ylabel("Frequency (MHz)")
     plt.tight_layout()
     plt.show()
 
 # ==========================================
-# 7. MAIN CONTROLLER
+# 8. MAIN CONTROLLER
 # ==========================================
 def run_experiment(usrp, fc, bw, dwell, label):
     print(f"\n[TASK] Starting Run: {label}")
@@ -212,7 +224,8 @@ def run_experiment(usrp, fc, bw, dwell, label):
     iq_data = capture_samples(usrp, dwell, bw)
     
     if len(iq_data) > 2000:
-        iq_clean = apply_dc_blocker(iq_data)
+        iq_clean = apply_dc_blocker(iq_data, fs=bw)
+        
         plot_time_domain(iq_clean, bw, label)
         compute_and_plot_block_stft(iq_clean, bw, fc, label)
     else:
@@ -223,7 +236,7 @@ if __name__ == "__main__":
         usrp_dev = setup_usrp(2440e6, 20e6, 30)
         
         print("\n" + "="*50)
-        print(f"   OPTIMIZED ANALYZER (Target Attenuation: {TARGET_ATTENUATION_DB}dB)")
+        print(f"   DYNAMIC ANALYZER (DC Cutoff: {DC_BLOCKER_CUTOFF_HZ} Hz)")
         print("="*50)
         
         while True:
