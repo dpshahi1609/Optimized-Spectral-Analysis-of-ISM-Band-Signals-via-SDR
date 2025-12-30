@@ -21,6 +21,7 @@
     - [The Spectrogram](#the-spectrogram)
     - [Spectral Leakage and Frequency Resolution](#spectral-leakage-and-frequency-resolution)
     - [The Kaiser Window](#the-kaiser-window)
+    - [Optimal Beta for Kaiser Window](#optimal-beta-for-kaiser-window)
    
 
    
@@ -883,4 +884,86 @@ The primary advantage of the Kaiser window is its **flexibility** and the existe
 * **Direct Design:** Using the formulas , one can calculate the exact length $L$ and shape $\beta$ required to meet specific filter specifications (like stopband attenuation and transition width), avoiding trial-and-error methods.
 
 > **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 7, Section 7.5.3, p. 541; Chapter 10, Section 10.2.2, p. 801.
+
+### Optimal Beta for Kaiser Window
+
+#### 1. Dynamic Range of an ADC
+
+**Definition:**
+From a signal processing perspective (Chapter 6), the dynamic range of an ADC is determined by its **Signal-to-Quantization-Noise Ratio (SQNR)**. It represents the ratio between the maximum possible signal amplitude (Full Scale) and the quantization noise floor introduced by the finite number of bits.
+
+For a $(B+1)$-bit quantizer (or $B$ bits plus sign), the dynamic range (SNR) is approximately:
+$$SNR \approx 6.02B + 1.76 \text{ dB}$$
+
+* **Full Scale (0 dB):** The maximum amplitude the ADC can ingest without clipping (saturation).
+* **Noise Floor:** The limit imposed by quantization error. Signals below this level are indistinguishable from quantization noise.
+* **Role in SDR:** In a Software Defined Radio, this defines the weakest signal you can detect in the presence of a strong signal filling the ADC's range.
+
+> **Source:** Eq. (6.33), Chapter 6, Section 6.3.2, p. 493.
+
+---
+
+#### 2. Relation to Spectral Leakage (Adapted Visual Explanation)
+
+Using the requested analogy structure adapted to Signal Processing terms:
+
+* **0 dB Reference (Surface):** This represents **0 dBFS (Full Scale)**. Strong signals, like a high-power local transmitter, reach near this level.
+* **ADC Noise Floor (The "True" Bottom):** This is the **-78 dB** limit (for your specific USRP case). It represents the quantization noise floor. The FFT cannot detect physical signals below this level because they are buried in quantization noise.
+* **Window Side Lobe Level (The Artificial Floor):** This is the attenuation of the window's side lobes (e.g., -60 dB).
+* **The Shadow Effect (Leakage):**
+    * If you use a window with side lobes at **-60 dB**, a strong signal at 0 dB will generate "spectral leakage" side lobes that extend down to -60 dB.
+    * A weak signal existing at **-70 dB** is physically detectable by the ADC (since -70 > -78).
+    * However, it will be **masked** (hidden) by the -60 dB side lobes of the strong signal. The "math noise" (leakage) effectively raises the noise floor above the hardware's capability.
+* **Conclusion:** To fully utilize the **78 dB** dynamic range of the hardware, you must select a window function where the side lobes are effectively below **-78 dB**. This ensures the only noise limiting your detection is the hardware itself, not the windowing mathematics.
+
+> **Source:** Interpretation of spectral masking and side lobes from Chapter 10, Section 10.2.
+
+---
+
+#### 3. Kaiser Window Calculation
+
+We will determine the optimal parameters for a Kaiser window to match the USRP hardware capabilities.
+
+**Given Specifications:**
+* **Target Dynamic Range ($A_{sl}$):** 78 dB (To match the hardware dynamic range).
+* **Frequency Resolution ($\Delta f$):** 25 kHz ($25,000$ Hz).
+* **Sampling Rate ($f_s$):** *Note: The formula requires frequency in radians. As f_s was not specified in this immediate prompt, we will derive the formula in terms of f_s.*
+
+#### Step A: Calculate Beta ($\beta$)
+We use the empirical formula for $A_{sl}$ (Side-lobe Attenuation). Since $A_{sl} = 78$ dB, we fall into the range $60 < A_{sl} \le 120$.
+
+**Formula:**
+$$\beta = 0.12438(A_{sl} + 6.3)$$
+
+**Calculation:**
+1.  Substitute $A_{sl} = 78$:
+    $$\beta = 0.12438(78 + 6.3)$$
+2.  Add terms:
+    $$\beta = 0.12438(84.3)$$
+3.  Multiply:
+    $$\beta \approx \mathbf{10.485}$$
+
+#### Step B: Calculate Window Length ($L$)
+We use the formula relating Length to Attenuation and Main-Lobe Width.
+
+**Formula:**
+$$L \approx \frac{24\pi(A_{sl} + 12)}{155 \Delta\omega_{ml}} + 1$$
+
+**Conversions:**
+The main-lobe width in radians ($\Delta\omega_{ml}$) is related to the resolution in Hz ($\Delta f$) and sampling rate ($f_s$) by:
+$$\Delta\omega_{ml} = \frac{2\pi \Delta f}{f_s}$$
+
+**Substitution:**
+1.  Substitute $A_{sl} = 78$ and $\Delta\omega_{ml}$:
+    $$L \approx \frac{24\pi(78 + 12)}{155 \cdot (2\pi \cdot 25000 / f_s)} + 1$$
+2.  Simplify numerator ($78+12 = 90$):
+    $$L \approx \frac{24\pi(90)}{155 \cdot 2\pi \cdot (25000 / f_s)} + 1$$
+3.  Cancel $2\pi$ terms:
+    $$L \approx \frac{12 \cdot 90}{155 \cdot (25000 / f_s)} + 1$$
+    $$L \approx \frac{1080}{155} \cdot \frac{f_s}{25000} + 1$$
+4.  Simplify constants ($1080/155 \approx 6.9677$):
+    $$L \approx 6.9677 \cdot \frac{f_s}{25000} + 1$$
+
+**Final Result for Length:**
+$$L \approx 2.787 \times 10^{-4} \cdot f_s + 1$$
 
