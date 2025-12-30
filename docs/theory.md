@@ -7,9 +7,9 @@
     - [USRP B210 Ubuntu Installation Guide UHD API](#usrp-b210-ubuntu-installation-guide-uhd-api)
     - [USRP Signal Processing Theoretical and Mathematical Explanation](#usrp-signal-processing-theoretical-and-mathematical-explanation)
     - [](#)
-    - [](#)
 2. [DC Blocker](#dc-blocker)
     - [IIR DC Blocker Filter Analysis](#iir-dc-blocker-filter-analysis)
+    - [DC Blocker Filter Cutoff Frequency Analysis](#dc-blocker-filter-cutoff-frequency-analysis)
     - [](#)
 
 ---
@@ -327,3 +327,114 @@ This is why the code includes return filtered[1000:]—to cut off that initial p
 * **Filter Design Theory:** Smith, J.O. "Introduction to Digital Filters with Audio Applications", *Stanford University*. [Link to Chapter on DC Blockers](https://ccrma.stanford.edu/~jos/fp/DC_Blocker.html)
 * **Implementation Reference:** SciPy.org, "scipy.signal.lfilter Documentation". [Link to SciPy Documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.lfilter.html)
 * **Practical DSP:** "The Scientist and Engineer's Guide to Digital Signal Processing", *Steven W. Smith*. [Link to Chapter 19: Recursive Filters](https://www.dspguide.com/ch19.htm)
+
+### DC Blocker Filter Cutoff Frequency Analysis
+
+The following documentation details the mathematical derivation for the cutoff frequency of a First-Order IIR DC Blocker filter. The derivation tracks the transition from the difference equation to the exact frequency response, and subsequently to a simplified approximation for implementation constraints.
+
+**Filter Definition:**
+The filter is defined by the difference equation:
+$$y(n) = x(n) - x(n-1) + \alpha y(n-1)$$
+
+Where $\alpha$ is the pole location, typically close to 1 (e.g., 0.995).
+
+---
+
+#### 1. Exact Cutoff Frequency Derivation
+
+The exact cutoff frequency is derived by analyzing the pole-zero plot and frequency response of the system transfer function.
+
+**Step 1: Transfer Function Determination**
+Taking the Z-transform of the difference equation:
+$$Y(z) = X(z) - X(z)z^{-1} + \alpha Y(z)z^{-1}$$
+
+Rearranging to solve for the transfer function $H(z) = \frac{Y(z)}{X(z)}$:
+$$Y(z)(1 - \alpha z^{-1}) = X(z)(1 - z^{-1})$$
+$$H(z) = \frac{1 - z^{-1}}{1 - \alpha z^{-1}}$$
+
+**Step 2: Frequency Response**
+Substituting $z = e^{j\theta}$ (where $\theta$ is the normalized frequency $\omega T$):
+$$H(\theta) = \frac{1 - e^{-j\theta}}{1 - \alpha e^{-j\theta}}$$
+
+Using Euler's Identity ($e^{-j\theta} = \cos\theta - j\sin\theta$) and separating real and imaginary parts:
+$$H(\theta) = \frac{(1 - \cos\theta) + j\sin\theta}{(1 - \alpha\cos\theta) + j\alpha\sin\theta}$$
+
+**Step 3: Magnitude Squared Response**
+The squared magnitude $|H(\theta)|^2$ is calculated as:
+$$|H(\theta)|^2 = \frac{(1 - \cos\theta)^2 + (\sin\theta)^2}{(1 - \alpha\cos\theta)^2 + (\alpha\sin\theta)^2}$$
+
+Expanding and applying the identity $\cos^2\theta + \sin^2\theta = 1$:
+$$|H(\theta)|^2 = \frac{1 - 2\cos\theta + \cos^2\theta + \sin^2\theta}{1 - 2\alpha\cos\theta + \alpha^2\cos^2\theta + \alpha^2\sin^2\theta}$$
+$$|H(\theta)|^2 = \frac{2 - 2\cos\theta}{1 + \alpha^2 - 2\alpha\cos\theta}$$
+
+**Step 4: Maximum Gain Calculation**
+To define the cutoff (-3dB point), we first identify the maximum gain. Differentiating with respect to $\theta$ reveals the maximum occurs at the Nyquist frequency $\theta = \pi$:
+$$|H(\pi)|^2 = \frac{2 - 2(-1)}{1 + \alpha^2 - 2\alpha(-1)} = \frac{4}{(1+\alpha)^2}$$
+$$\therefore |H(\theta)|_{\text{max}} = \frac{2}{1+\alpha}$$
+
+**Step 5: Exact Cutoff Formula**
+The cutoff frequency $\theta_c$ is defined where the gain drops to $\frac{1}{\sqrt{2}}$ of the maximum:
+$$|H(\theta_c)|^2 = \frac{1}{2} |H(\theta)|_{\text{max}}^2$$
+
+Substituting the derived expressions:
+$$\frac{2 - 2\cos\theta_c}{1 + \alpha^2 - 2\alpha\cos\theta_c} = \frac{1}{2} \left( \frac{4}{(1+\alpha)^2} \right)$$
+
+Through algebraic simplification (cross-multiplying and solving for $\cos\theta_c$), we obtain the condition:
+$$\cos\theta_c = \frac{2\alpha}{1+\alpha^2}$$
+
+Converting normalized frequency $\theta_c$ to Hz ($f_c$):
+$$f_c = \frac{f_s}{2\pi} \cos^{-1}\left( \frac{2\alpha}{1+\alpha^2} \right)$$
+
+---
+
+#### 2. Approximate Cutoff Frequency Derivation
+
+For DSP implementations where $\alpha \approx 1$, a simplified linear approximation is often required to avoid computationally expensive inverse cosine functions.
+
+**Step 1: Small Angle Assumption**
+Let $\alpha = 1 - \epsilon$, where $\epsilon$ is a very small number ($\epsilon \to 0$).
+Substituting this into the exact condition $\cos\theta_c = \frac{2\alpha}{1+\alpha^2}$:
+
+$$\frac{2(1-\epsilon)}{1 + (1-\epsilon)^2} = \frac{2 - 2\epsilon}{1 + (1 - 2\epsilon + \epsilon^2)} = \frac{2 - 2\epsilon}{2 - 2\epsilon + \epsilon^2}$$
+
+**Step 2: Taylor Series Approximation**
+Dividing the numerator and denominator by 2 (and ignoring the negligible $\epsilon^2$ term in the denominator for the first-order approximation):
+$$\approx \frac{1 - \epsilon}{1 - \epsilon} \quad \text{(This is too rough, we need higher precision)}$$
+
+Instead, we use the property that for small $x$, $\cos(x) \approx 1 - \frac{x^2}{2}$.
+We manipulate the fraction:
+$$\frac{2 - 2\epsilon}{2 - 2\epsilon + \epsilon^2} = 1 - \frac{\epsilon^2}{2 - 2\epsilon + \epsilon^2}$$
+
+Since $\epsilon$ is small, the denominator $2 - 2\epsilon + \epsilon^2 \approx 2$. Thus:
+$$\text{RHS} \approx 1 - \frac{\epsilon^2}{2}$$
+
+**Step 3: Equating Approximations**
+We now have:
+$$\cos(\theta_c) \approx 1 - \frac{\epsilon^2}{2}$$
+
+Comparing this to the Taylor expansion of cosine ($\cos(\theta) \approx 1 - \frac{\theta^2}{2}$):
+$$\theta_c \approx \epsilon$$
+
+**Step 4: Final Approximate Formula**
+Substituting $\theta_c = 2\pi \frac{f_c}{f_s}$ and $\epsilon = 1 - \alpha$:
+$$2\pi \frac{f_c}{f_s} \approx 1 - \alpha$$
+
+$$f_c \approx \frac{f_s}{2\pi}(1 - \alpha)$$
+
+---
+
+#### Summary of Results
+
+| Parameter | Formula |
+| :--- | :--- |
+| **Transfer Function** | $H(z) = \frac{1 - z^{-1}}{1 - \alpha z^{-1}}$ |
+| **Exact Cutoff** | $f_c = \frac{f_s}{2\pi} \cos^{-1}\left( \frac{2\alpha}{1+\alpha^2} \right)$ |
+| **Approximate Cutoff** | $f_c \approx \frac{f_s}{2\pi}(1 - \alpha)$ |
+
+---
+
+#### Sources
+* [cite_start]**IIR FILTER.pdf** (Provided User Document) - *Pages 1-3* [cite: 62-82]
+    * Derivation of exact transfer function and maximum gain.
+* [cite_start]**Filter approximate cutoff frequency.pdf** (Provided User Document) - *Pages 1-2* [cite: 1-21]
+    * Derivation of small-angle approximation using Taylor series.
