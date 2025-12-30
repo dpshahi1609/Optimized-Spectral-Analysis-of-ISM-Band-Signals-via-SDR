@@ -880,49 +880,7 @@ The primary advantage of the Kaiser window is its **flexibility** and the existe
     * If $\beta = 0$, it becomes a Rectangular window (narrowest main lobe, highest side lobes).
     * As $\beta$ increases, the side lobes decrease in amplitude, but the main lobe becomes wider.
 * **Near-Optimal Performance:** The Kaiser window approximates the *prolate spheroidal wave functions*, which are theoretically optimal in maximizing energy concentration in the main lobe.
-* **Direct Design:** Using the formulas provided below, one can calculate the exact length $L$ and shape $\beta$ required to meet specific filter specifications (like stopband attenuation and transition width), avoiding trial-and-error methods.
+* **Direct Design:** Using the formulas , one can calculate the exact length $L$ and shape $\beta$ required to meet specific filter specifications (like stopband attenuation and transition width), avoiding trial-and-error methods.
 
 > **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 7, Section 7.5.3, p. 541; Chapter 10, Section 10.2.2, p. 801.
 
----
-
-#### 3. Explanation of Design Formulas
-
-The text provides empirical formulas to determine the window parameters based on the desired **Relative Side-Lobe Amplitude ($A_{sl}$)** and the **Main-Lobe Width ($\Delta\omega_{ml}$)**.
-
-#### A. The Beta ($\beta$) Formula
-This formula determines the shape of the window required to achieve a certain side-lobe attenuation level, $A_{sl}$ (in dB).
-
-$$
-\beta = 
-\begin{cases} 
-0, & A_{sl} \le 13.26 \\
-0.76609(A_{sl} - 13.26)^{0.4} + 0.09834(A_{sl} - 13.26), & 13.26 < A_{sl} \le 60 \\
-0.12438(A_{sl} + 6.3), & 60 < A_{sl} \le 120 
-\end{cases}
-$$
-
-* **$\beta$**: The shape parameter for the Kaiser window (used in the Bessel function definition of the window).
-* **$A_{sl}$**: The desired attenuation of the side lobes relative to the main lobe, expressed in decibels (dB). For example, if you need the side lobes to be 50 dB lower than the main peak, $A_{sl} = 50$.
-* **Explanation**:
-    * If $A_{sl} \le 13.26$ dB (the attenuation of a simple rectangular window), no tapering is needed, so $\beta = 0$.
-    * For higher attenuation (between 13.26 and 60 dB), a complex curve fit is used.
-    * For very high attenuation (above 60 dB), the relationship is linear.
-
-> **Source:** Eq. (10.13), Chapter 10, Section 10.2.2, p. 801.
-
-#### B. The Length ($L$) Formula
-This formula estimates the number of samples (length) required to meet the specifications.
-
-$$L \approx \frac{24\pi(A_{sl} + 12)}{155 \Delta\omega_{ml}} + 1$$
-
-* **$L$**: The length of the window (number of samples).
-* **$A_{sl}$**: The desired relative side-lobe attenuation in dB.
-* **$\Delta\omega_{ml}$**: The width of the main lobe (in radians). In filter design, this usually corresponds to the transition width of the filter ($\Delta\omega = \omega_{stop} - \omega_{pass}$).
-* **Explanation**:
-    * The length $L$ is inversely proportional to the bandwidth $\Delta\omega_{ml}$. A narrower transition (sharper filter) requires a longer window.
-    * The length increases as the requirement for side-lobe attenuation ($A_{sl}$) increases.
-
-*(Note: In the user prompt, "ml" appears in the denominator. This refers to the main-lobe width $\Delta\omega_{ml}$)*.
-
-> **Source:** Eq. (10.14), Chapter 10, Section 10.2.2, p. 801.
