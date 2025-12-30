@@ -10,6 +10,7 @@
 2. [DC Blocker](#dc-blocker)
     - [IIR DC Blocker Filter Analysis](#iir-dc-blocker-filter-analysis)
     - [DC Blocker Filter Cutoff Frequency Analysis](#dc-blocker-filter-cutoff-frequency-analysis)
+    - [ DC Blocker Transient Response and Settling Time Analysis](#dc-blocker-transient-response-and-settling-time-analysis)
     - [](#)
 
 ---
@@ -438,3 +439,57 @@ $$f_c \approx \frac{f_s}{2\pi}(1 - \alpha)$$
     * Derivation of exact transfer function and maximum gain.
 * [cite_start]**Filter approximate cutoff frequency.pdf** (Provided User Document) - *Pages 1-2* [cite: 1-21]
     * Derivation of small-angle approximation using Taylor series.
+
+
+### DC Blocker Transient Response and Settling Time Analysis
+
+The implementation of an Infinite Impulse Response (IIR) DC blocker introduces a critical time-domain constraint known as **Settling Time**. This is the duration required for the filter's internal state to stabilize after initialization or a sudden change in input.
+
+#### 1. The Concept of Settling Time
+An IIR filter, by definition, uses feedback ($\alpha$) to process signals. This feedback creates a "memory" effect where the output depends on previous outputs. When the filter is first started (or encounters a step change), it produces a **Transient Response**—a temporary period of distorted output before it reaches its steady-state behavior.
+
+#### 2. Time Constant ($\tau$) Calculation
+The duration of this transient response is governed by the filter's **Time Constant** ($\tau$), which is inversely proportional to the distance of the pole ($\alpha$) from the unit circle.
+
+For a first-order IIR filter with a pole at $\alpha$ (where $\alpha \approx 1$), the time constant in samples is approximated by the standard DSP formula:
+
+$$\tau \approx \frac{1}{1 - \alpha}$$
+
+* **$\tau$ (Tau):** The number of samples it takes for the transient error to decay to approx 36.8% ($1/e$) of its initial value.
+* **$\alpha$ (Alpha):** The filter coefficient. As $\alpha \to 1$, the denominator $(1-\alpha) \to 0$, causing $\tau$ to increase rapidly.
+
+#### 3. The 5$\tau$ Stability Rule
+In control theory and signal processing, a system is generally considered "settled" (or stable enough for accurate measurement) after approximately **5 Time Constants**.
+
+$$\text{Settling Time} \approx 5 \times \tau$$
+
+At $5\tau$, the transient error has decayed to less than 1% ($e^{-5} \approx 0.0067$), making the data reliable for processing.
+
+#### 4. Critical Code Conflict: Discarding Samples
+The provided code snippet includes a hardcoded discard limit: `filtered[1000:]`. This creates a potential data integrity risk if the filter's physics conflicts with this arbitrary number.
+
+* **The Conflict:** If the chosen $\alpha$ results in a Settling Time ($5\tau$) that is greater than the number of discarded samples ($N_{discard}$), the user will receive corrupted data containing transient artifacts.
+* **The Condition:** Data is valid only if:
+    $$N_{discard} > \frac{5}{1 - \alpha}$$
+
+If this condition is not met, the initial chunk of the returned signal will be distorted "garbage" data rather than the true signal.
+
+#### 5. Optimization & Trade-offs
+There is an inherent trade-off between frequency resolution and time-domain performance.
+
+| Parameter | Effect of Increasing $\alpha$ (closer to 1.0) | Effect of Decreasing $\alpha$ (further from 1.0) |
+| :--- | :--- | :--- |
+| **Cutoff Frequency** | **Lower (Better):** Removes only DC; preserves low freq signals. | **Higher (Worse):** May attenuate useful low freq bass/signals. |
+| **Settling Time** | **Slower (Worse):** Filter takes longer to stabilize. | **Faster (Better):** Filter stabilizes quickly. |
+| **Data Loss** | **High:** Requires discarding more initial samples. | **Low:** Requires discarding fewer initial samples. |
+
+**Final Recommendation:**
+To ensure data integrity, the number of discarded samples in the code must be dynamically calculated based on $\alpha$, or $\alpha$ must be tuned such that $5\tau$ fits within the fixed discard limit.
+
+---
+##### Sources
+* [DSPRelated - DC Blocker Introduction & Time Constants](https://www.dsprelated.com/freebooks/filters/DC_Blocker.html)
+* [DSPRelated - Calculating Time Constants for IIR Filters](https://www.dsprelated.com/showthread/comp.dsp/5126-1.php)
+* [DSP StackExchange - Trade-off between DC removal and Settling Time](https://dsp.stackexchange.com/questions/74237/how-to-implement-a-high-pass-filter-digitally-to-remove-the-dc-offset-from-senso)
+* [ETH Zurich - Signals and Systems Lecture 9 (IIR Properties)](https://ethz.ch/content/dam/ethz/special-interest/mavt/dynamic-systems-n-control/idsc-dam/Lectures/Signals-and-Systems/Lectures/Fall2018/Lecture9_sigsys.pdf)
+
