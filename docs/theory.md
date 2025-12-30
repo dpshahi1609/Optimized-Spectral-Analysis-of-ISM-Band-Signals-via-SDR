@@ -18,6 +18,7 @@
     - [Why is STFT Needed](#why-is-stft-needed)
     - [STFT Formulas](#stft-formulas)
     - [Numerical Example](#numerical-example)
+    - [The Spectrogram](#the-spectrogram)
    
 
    
@@ -730,3 +731,55 @@ Using $W_4^0 = 1, W_4^1 = -j, W_4^2 = -1, W_4^3 = j$.
 
 #### Observation
 Comparing $r=0$ and $r=1$, the AC components ($k=1, 2, 3$) remained identical because the "shape" of the ramp (a slope of 1) did not change, only its DC offset increased by 4 (the difference between $x[n]$ and $x[n-1]$ accumulated over 4 samples). This demonstrates how the STFT tracks spectral properties over time.
+
+### The Spectrogram
+
+This document explains the concept of a spectrogram, its axes, and the information it conveys, based on **Chapter 10** of *Discrete-Time Signal Processing* by Oppenheim and Schafer (3rd Edition).
+
+---
+
+#### 1. Definition and Quote
+
+A spectrogram is a visual representation of the Short-Time Fourier Transform (STFT) magnitude. As defined in the text:
+
+> "This display, which shows $20 \log_{10} |X[n, \lambda)|$ as a function of $\lambda/2\pi$ in the vertical dimension, and the time index $n$ in the horizontal dimension is called a **spectrogram**."
+
+*Note: The quote in the text refers to the signal transform $X[n, \lambda)$ (or $Y[n, \lambda)$ depending on context of the specific figure being discussed).*
+
+> **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 10, Section 10.3, p. 817 (describing Figure 10.12).
+
+---
+
+#### 2. Axes and Structure
+
+The spectrogram maps a three-dimensional function (magnitude vs. time vs. frequency) onto a two-dimensional plane.
+
+* **Horizontal Axis (Time):**
+    * Represents the time index $n$ (or sample number).
+    * As you move from left to right, you are observing the evolution of the signal over time.
+    * The time axis corresponds to the sliding position of the analysis window.
+
+* **Vertical Axis (Frequency):**
+    * Represents the normalized frequency $\lambda/2\pi$ (or sometimes analog frequency if the sampling rate is known).
+    * Commonly ranges from $0$ to $0.5$ (representing $0$ to the Nyquist frequency, $\pi$).
+    * As you move from bottom to top, the frequency increases.
+
+> **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 10, Section 10.3, text surrounding Figure 10.12.
+
+---
+
+#### 3. Information Provided
+
+The spectrogram provides a "time-frequency" view of a signal, allowing us to see how the spectral content changes over time.
+
+* **Intensity/Color (Magnitude):**
+    * Since the display is 2D, the third dimension—the magnitude of the transform $|X[n, \lambda)|$—is represented by the darkness, brightness, or color of the point $(n, \lambda)$.
+    * The value is typically plotted on a logarithmic scale ($20 \log_{10}$) to compress the dynamic range, making it easier to see low-level spectral components alongside strong ones.
+    * **Dark/Colored Areas:** Indicate high energy or strong frequency components at that specific time and frequency.
+    * **Light/Background Areas:** Indicate low energy or silence.
+
+* **Key Insights:**
+    * It allows identification of **nonstationary** features, such as chirps (frequencies changing linearly), speech formants, or transient pulses.
+    * It reveals the trade-off between time and frequency resolution: a wide window (long time duration) gives narrow frequency bands (good frequency resolution) but blurs time details (poor time resolution), and vice versa.
+
+> **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 10, Section 10.3, pp. 817-819.
