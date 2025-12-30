@@ -11,6 +11,7 @@
     - [IIR DC Blocker Filter Analysis](#iir-dc-blocker-filter-analysis)
     - [DC Blocker Filter Cutoff Frequency Analysis](#dc-blocker-filter-cutoff-frequency-analysis)
     - [ DC Blocker Transient Response and Settling Time Analysis](#dc-blocker-transient-response-and-settling-time-analysis)
+    - [Optimal DC Blocker Configuration](#optimal-dc-blocker-configuration)
     - [](#)
 
 ---
@@ -493,3 +494,97 @@ To ensure data integrity, the number of discarded samples in the code must be dy
 * [DSP StackExchange - Trade-off between DC removal and Settling Time](https://dsp.stackexchange.com/questions/74237/how-to-implement-a-high-pass-filter-digitally-to-remove-the-dc-offset-from-senso)
 * [ETH Zurich - Signals and Systems Lecture 9 (IIR Properties)](https://ethz.ch/content/dam/ethz/special-interest/mavt/dynamic-systems-n-control/idsc-dam/Lectures/Signals-and-Systems/Lectures/Fall2018/Lecture9_sigsys.pdf)
 
+ 
+### Optimal DC Blocker Configuration
+
+The design of a First-Order IIR DC Blocker requires balancing two competing requirements: **Frequency Resolution** (preserving low-frequency signals) and **Transient Response** (minimizing the data lost to filter settling). This balance is controlled by the pole location parameter, **Alpha ($\alpha$)**.
+
+#### 1. The DC Blocker Transfer Function
+
+The standard recursive (IIR) DC blocker is defined by the difference equation:
+
+$$y[n] = x[n] - x[n-1] + \alpha \cdot y[n-1]$$
+
+Its transfer function in the Z-domain is:
+
+$$H(z) = \frac{1 - z^{-1}}{1 - \alpha z^{-1}}$$
+
+Where:
+* **Zero at $z=1$ (DC):** Forces the gain at 0 Hz to be zero.
+* **Pole at $z=\alpha$:** Determines how "sharp" the notch is. As $\alpha \to 1$, the notch becomes narrower, preserving more low-frequency signal but increasing the settling time.
+
+---
+
+#### 2. Determining Optimal Alpha ($\alpha$)
+
+To find the "optimal" $\alpha$, we map the filter's **-3dB Cutoff Frequency ($f_c$)** to the pole location. The goal is to set $f_c$ below the lowest frequency component of interest (e.g., your resolution limit).
+
+**The Mathematical Derivation:**
+For low-frequency cutoffs ($f_c \ll f_s$), the relationship between the -3dB cutoff frequency and $\alpha$ is approximated by the small-angle approximation of the unit circle on the Z-plane.
+
+$$f_c \approx \frac{f_s (1 - \alpha)}{2\pi}$$
+
+Rearranging to solve for $\alpha$:
+
+$$\alpha_{optimal} \approx 1 - \frac{2\pi f_c}{f_s}$$
+
+* **$f_c$ (Cutoff Frequency):** The frequency where the signal is attenuated by 3dB. Signals below this are blocked.
+* **$f_s$ (Sampling Rate):** The rate at which the USRP is capturing data.
+
+**Constraint:**
+If you require a frequency resolution of 25 kHz, you typically set $f_c$ to be a fraction of that (e.g., 10% or exactly equal depending on tolerance) to ensure the 25 kHz signal is not significantly attenuated.
+
+---
+
+#### 3. Calculating Discarded Samples (Settling Time)
+
+IIR filters have "infinite" memory, meaning their output depends on previous states. When the filter starts, it encounters a "step input" (the DC offset). It takes time for the internal state to rise from 0 to match this offset. This period is called the **Transient Response**.
+
+**The Time Constant ($\tau$):**
+The speed at which the filter settles is governed by its decay time constant, measured in samples:
+
+$$\tau \approx \frac{1}{1 - \alpha} \quad \text{(samples)}$$
+
+**The 5-Tau Rule:**
+In linear systems theory, a system is considered "settled" (within ~0.7% of the final value) after **5 Time Constants**.
+
+$$N_{discard} \approx 5 \times \tau = \frac{5}{1 - \alpha}$$
+
+* **At $1\tau$:** 63.2% settled.
+* **At $3\tau$:** 95.0% settled.
+* **At $5\tau$:** 99.3% settled (Standard engineering safety margin).
+
+---
+
+#### 4. Summary Calculation Workflow
+
+To implement this dynamically in software for a USRP B210:
+
+| Step | Parameter | Formula |
+| :--- | :--- | :--- |
+| **1** | **Target Cutoff ($f_c$)** | Defined by user needs (e.g., 25 kHz or $0.1 \times$ Resolution). |
+| **2** | **Optimal Alpha ($\alpha$)** | $\alpha = 1 - \frac{2\pi f_c}{f_s}$ |
+| **3** | **Time Constant ($\tau$)** | $\tau = \frac{1}{1 - \alpha}$ |
+| **4** | **Samples to Discard** | $N = \lceil 5 \times \tau \rceil$ |
+
+#### Numerical Example
+* **Scenario:** $f_s = 20 \text{ MHz}$, Target $f_c = 25 \text{ kHz}$.
+1.  **Calculate Alpha:**
+    $$\alpha = 1 - \frac{2\pi \times 25000}{20000000} = 1 - 0.00785 = \mathbf{0.99215}$$
+2.  **Calculate Time Constant:**
+    $$\tau = \frac{1}{1 - 0.99215} \approx 127 \text{ samples}$$
+3.  **Calculate Discard Count:**
+    $$N_{discard} = 5 \times 127 = \mathbf{635 \text{ samples}}$$
+
+---
+
+#### Sources
+* **J.O. Smith III, "Introduction to Digital Filters with Audio Applications", Stanform University.**
+    * *Topic:* DC Blocker difference equation and pole placement.
+    * [Link to Text](https://ccrma.stanford.edu/~jos/fp/DC_Blocker.html)
+* **Richard G. Lyons, "Understanding Digital Signal Processing".**
+    * *Topic:* IIR Filter transient response and settling time ($5\tau$ rule).
+    * [Link to Book Info](https://www.dsprelated.com/freebooks/filters/Transient_Response.html)
+* **Analog Devices, "Linear Circuit Design Handbook", Chapter 8.**
+    * *Topic:* Relationship between cutoff frequency and time constant.
+    * [Link to Handbook](https://www.analog.com/en/education/education-library/linear-circuit-design-handbook.html)
