@@ -8,7 +8,9 @@
     - [USRP Signal Processing Theoretical and Mathematical Explanation](#usrp-signal-processing-theoretical-and-mathematical-explanation)
     - [](#)
     - [](#)
-
+2. [DC Blocker](#dc-blocker)
+    - [IIR DC Blocker Filter Analysis](#iir-dc-blocker-filter-analysis)
+    - [](#)
 
 ---
 ## USRP
@@ -258,3 +260,70 @@ These steps are necessary for both binary and source installations to ensure the
 * [USRP B210 & B200 Installation Guide](https://www.youtube.com/watch?v=ObzWYGvsGmI)
 
 
+## DC Blocker
+
+### IIR DC Blocker Filter Analysis
+
+This document analyzes the provided Python implementation of a First-Order IIR DC Blocker. It connects the `scipy.signal.lfilter` coefficients to the underlying difference equation and provides a numerical step-by-step trace to demonstrate how DC offset is removed.
+
+#### 1. Mathematical Foundation
+
+The code implements a classic First-Order IIR High-Pass Filter used for DC removal.
+
+**Transfer Function:**
+The transfer function $H(z)$ is defined as:
+
+$$H(z) = \frac{Y(z)}{X(z)} = \frac{1 - z^{-1}}{1 - \alpha z^{-1}}$$
+
+**Difference Equation:**
+By applying the inverse Z-transform, we derive the time-domain difference equation used for calculation:
+
+$$y[n] = x[n] - x[n-1] + \alpha \cdot y[n-1]$$
+
+**Mapping to Python (`lfilter`):**
+The `scipy.signal.lfilter` function solves difference equations using coefficient arrays `b` (numerator) and `a` (denominator).
+* **Numerator (`b`):** $[1, -1]$ corresponds to $1 - z^{-1}$ (Terms: $x[n] - x[n-1]$).
+* **Denominator (`a`):** $[1, -\alpha]$ corresponds to $1 - \alpha z^{-1}$ (Terms: $y[n] - \alpha y[n-1]$).
+
+---
+
+#### 2. Numerical Trace: Removing a Constant DC Offset
+
+
+
+We track the filter's behavior manually to verify DC removal.
+
+**Scenario:**
+* **Input ($x$):** A constant DC signal of **10** (e.g., 10V DC offset).
+* **Alpha ($\alpha$):** Set to **0.5** for simplified math.
+* **Initial State:** Assume $x[-1] = 0$ and $y[-1] = 0$.
+
+**Trace Table:**
+
+| Step ($n$) | Current Input ($x[n]$) | Previous Input ($x[n-1]$) | Previous Output ($y[n-1]$) | Calculation ($x[n] - x[n-1] + 0.5 \cdot y[n-1]$) | Output ($y[n]$) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **0** | 10 | 0 | 0 | $10 - 0 + (0.5 \times 0)$ | **10.0** |
+| **1** | 10 | 10 | 10 | $10 - 10 + (0.5 \times 10)$ | **5.0** |
+| **2** | 10 | 10 | 5 | $10 - 10 + (0.5 \times 5)$ | **2.5** |
+| **3** | 10 | 10 | 2.5 | $10 - 10 + (0.5 \times 2.5)$ | **1.25** |
+| **4** | 10 | 10 | 1.25 | $10 - 10 + (0.5 \times 1.25)$ | **0.625** |
+| ... | ... | ... | ... | ... | ... |
+| **$\infty$** | 10 | 10 | ~0 | $10 - 10 + (0.5 \times 0)$ | **0.0** |
+
+##### Analysis of the Trace
+1.  **Step 0 (The Spike):** The filter initially outputs **10**. This is the **Transient Response**. The filter has not yet "learned" that the 10 is constant; it looks like a new step change.
+2.  **Steps 1-4 (The Decay):** The term $(x[n] - x[n-1])$ becomes $(10 - 10 = 0)$. This is the mechanism that "blocks" the DC. A constant value has a difference of zero.
+3.  **The Memory Effect:** The output stays non-zero briefly because of the feedback term $+ \alpha \cdot y[n-1]$. With $\alpha=0.5$, the residual error is halved every step.
+4.  **Convergence:** The value rapidly approaches 0. The DC offset is removed.
+
+---
+If we had used alpha=0.99, the value would shrink by 0.99 every time. It would take much longer to reach 0 (a longer transient), but the filter would be much sharper, preserving signals that are near DC (like 1Hz or 2Hz) much better than alpha=0.5.
+
+This is why the code includes return filtered[1000:]—to cut off that initial period where the value is dropping from 10 down to 0.
+
+---
+
+#### Sources
+* **Filter Design Theory:** Smith, J.O. "Introduction to Digital Filters with Audio Applications", *Stanford University*. [Link to Chapter on DC Blockers](https://ccrma.stanford.edu/~jos/fp/DC_Blocker.html)
+* **Implementation Reference:** SciPy.org, "scipy.signal.lfilter Documentation". [Link to SciPy Documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.lfilter.html)
+* **Practical DSP:** "The Scientist and Engineer's Guide to Digital Signal Processing", *Steven W. Smith*. [Link to Chapter 19: Recursive Filters](https://www.dspguide.com/ch19.htm)
