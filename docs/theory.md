@@ -13,7 +13,14 @@
     - [ DC Blocker Transient Response and Settling Time Analysis](#dc-blocker-transient-response-and-settling-time-analysis)
     - [Optimal DC Blocker Configuration](#optimal-dc-blocker-configuration)
     - [](#)
+3. [STFT](#stft)
+    - [Why is Windowing Needed](#why-is-windowing-needed)
+    - [Why is STFT Needed](#why-is-stft-needed)
+    - [STFT Formulas](#stft-formulas)
+    - [Numerical Example](#numerical-example)
+   
 
+   
 ---
 ## USRP
 
@@ -588,3 +595,138 @@ To implement this dynamically in software for a USRP B210:
 * **Analog Devices, "Linear Circuit Design Handbook", Chapter 8.**
     * *Topic:* Relationship between cutoff frequency and time constant.
     * [Link to Handbook](https://www.analog.com/en/education/education-library/linear-circuit-design-handbook.html)
+
+## STFT
+
+### Why is Windowing Needed
+
+Windowing is required primarily because the Discrete Fourier Transform (DFT) can only process signals of **finite length**, whereas many real-world signals (like speech or radar) are indefinitely long.
+
+* **Finite Duration Requirement:** To use the DFT, we must select a finite-length segment of the signal $x[n]$. This is done by multiplying the signal by a window sequence $w[n]$ that is zero outside a specific range.
+* **Spectral Leakage Control:** A simple truncation (rectangular window) causes "smearing" of energy in the frequency domain, known as **leakage**. This happens because the abrupt edges of a rectangular window create large side lobes in its frequency response.
+* **Smoothing:** Applying a tapered window (like a Hamming or Kaiser window) smooths the edges of the signal segment. This reduces the side lobes in the frequency domain, allowing for better distinction between sinusoidal components that have different amplitudes, though it effectively widens the main peak (reducing resolution slightly).
+
+> **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 10, Section 10.1, pp. 793-795; [cite_start]Section 10.2.1 "The Effect of Windowing", pp. 797-800[cite: 1, 4].
+
+---
+
+### Why is STFT Needed
+
+The standard Fourier transform (or a single long DFT) is insufficient for **nonstationary signals**, whose properties change over time.
+
+* **Time-Varying Properties:** Signals like speech, radar, or linear chirps have frequencies that vary with time. A single DFT over a long duration averages these frequency components together, losing the information about *when* specific frequencies occurred.
+* **Tracking Changes:** To analyze these changes, we need a method that tracks frequency content as a function of time. The STFT achieves this by computing the Fourier transform of short, overlapping segments of the signal as the window slides past the signal.
+* **Trade-off:** A shorter window provides better time resolution (we know better *when* an event happened) but poorer frequency resolution (we know less precisely *what* frequency it is), and vice versa.
+
+> [cite_start]**Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 10, Section 10.3 "The Time-Dependent Fourier Transform", pp. 811-814[cite: 4].
+
+---
+
+### STFT Formulas
+
+The STFT is formally referred to in the text as the **Time-Dependent Fourier Transform**.
+
+#### Continuous Frequency Definition
+The fundamental formula for the time-dependent Fourier transform is:
+
+$$X[n, \lambda) = \sum_{m=-\infty}^{\infty} x[n+m]w[m]e^{-j \lambda m}$$
+
+* **$n$**: The discrete time index where the window is positioned.
+* **$\lambda$**: The continuous frequency variable (radians).
+* **$x[n+m]$**: The signal shifted in time.
+* **$w[m]$**: The window sequence (stationary relative to $m$).
+
+> **Source:** Eq. (10.18), Chapter 10, Section 10.3, p. [cite_start]811[cite: 4].
+
+#### Discrete STFT (Sampled Frequency)
+In practice, we compute the transform at discrete frequency samples $\lambda_k = \frac{2\pi k}{N}$ using the DFT. This creates a sampled spectrum $X[n, k]$.
+
+If the window $w[m]$ has a finite length $L$ (nonzero for $0 \le m \le L-1$) and we use a DFT of length $N$ (where $N \ge L$):
+
+$$X[n, k] = \sum_{m=0}^{L-1} x[n+m]w[m]e^{-j \frac{2\pi}{N} k m}, \quad k = 0, 1, \dots, N-1$$
+
+* **Overlap:** The parameter $n$ is typically advanced by a step size $R$ (often called the hop size) rather than 1. This creates overlap between consecutive analysis windows. If window length is $L$ and step is $R < L$, the overlap is $L-R$ samples.
+
+> **Source:** Derived from Eq. (10.18) and the definition of DFT in Eq. (10.3) [cite_start]and Section 10.3 discussion[cite: 4].
+
+#### Discrete STFT (Sampled in both time and frequency) 
+
+The specific formula provided represents the **Discrete Short-Time Fourier Transform** sampled in both time and frequency. In the text, the general Time-Dependent Fourier Transform is defined as $X[n, \lambda)$. When sampled at discrete frequencies $\lambda_k = 2\pi k/N$ and discrete time intervals $n = rR$, it becomes:
+
+$$X[rR, k] = \sum_{m=0}^{L-1} x[rR + m]w[m]e^{-j \frac{2\pi}{N} k m}$$
+
+#### Detailed Component Analysis
+
+* **$X[rR, k]$**: The STFT value at block index $r$ and frequency bin $k$.
+* **$r$**: The integer index of the time frame (or block).
+* **$R$**: The **temporal decimation factor** or **hop size**. It represents the number of samples the window slides between consecutive frames.
+    * If $R < L$, the windows overlap.
+    * If $R = L$, there is no overlap.
+* **$rR$**: The starting sample index of the current analysis window in the global signal $x[n]$.
+* **$m$**: The local time index inside the window, ranging from $0$ to $L-1$.
+* **$x[rR + m]$**: The segment of the signal currently being analyzed. It selects samples starting from $rR$.
+* **$w[m]$**: The window sequence (e.g., Hamming, Rectangular) of length $L$, which is stationary relative to the local index $m$.
+* **$e^{-j \frac{2\pi}{N} k m}$**: The complex exponential basis function of the DFT. Note that the phase depends on the local index $m$, meaning the phase reference is the start of the current window.
+
+> **Source:** *Discrete-Time Signal Processing*, 3rd Ed., Chapter 10, Section 10.3, "The Time-Dependent Fourier Transform". The sampling in time and frequency is discussed following Eq. (10.18).
+
+---
+
+### Numerical Example
+
+We will calculate the STFT for a linearly increasing signal.
+
+**Parameters:**
+* **Signal ($x[n]$):** $\{ 1, 2, 3, 4, 5, \dots \}$
+* **Window ($w[m]$):** Rectangular of length **$L=4$** ($w = \{1, 1, 1, 1\}$).
+* **DFT Length ($N$):** 4.
+* **Hop Size ($R$):** 1.
+    * **Overlap:** $L - R = 4 - 1 = 3$ samples.
+    * **Percentage:** $3/4 = \mathbf{75\%}$.
+
+**Objective:** Calculate $X[rR, k]$ for time blocks $r=0$ and $r=1$.
+
+#### Step 1: Time Block $r=0$
+* **Start Index ($rR$):** $0 \times 1 = 0$.
+* **Segment $x[0+m]$:** $\{1, 2, 3, 4\}$.
+* **Windowed Segment:** $\{1, 2, 3, 4\}$ (since $w[m]=1$).
+
+**4-Point DFT Calculation ($N=4$):**
+Using $W_4^0 = 1, W_4^1 = -j, W_4^2 = -1, W_4^3 = j$.
+
+* **$k=0$ (DC):**
+    $$1 + 2 + 3 + 4 = \mathbf{10}$$
+* **$k=1$:**
+    $$1(1) + 2(-j) + 3(-1) + 4(j) = 1 - 2j - 3 + 4j = \mathbf{-2 + 2j}$$
+* **$k=2$:**
+    $$1(1) + 2(-1) + 3(1) + 4(-1) = 1 - 2 + 3 - 4 = \mathbf{-2}$$
+* **$k=3$:**
+    $$1(1) + 2(j) + 3(-1) + 4(-j) = 1 + 2j - 3 - 4j = \mathbf{-2 - 2j}$$
+
+**Result $X[0, k]$:** $\{10, -2+2j, -2, -2-2j\}$
+
+---
+
+#### Step 2: Time Block $r=1$
+* **Start Index ($rR$):** $1 \times 1 = 1$.
+* **Segment $x[1+m]$:** $\{2, 3, 4, 5\}$.
+    *(Notice the substantial overlap with the previous segment)*
+* **Windowed Segment:** $\{2, 3, 4, 5\}$.
+
+**4-Point DFT Calculation:**
+
+* **$k=0$ (DC):**
+    $$2 + 3 + 4 + 5 = \mathbf{14}$$
+* **$k=1$:**
+    $$2(1) + 3(-j) + 4(-1) + 5(j) = 2 - 3j - 4 + 5j = \mathbf{-2 + 2j}$$
+* **$k=2$:**
+    $$2(1) + 3(-1) + 4(1) + 5(-1) = 2 - 3 + 4 - 5 = \mathbf{-2}$$
+* **$k=3$:**
+    $$2(1) + 3(j) + 4(-1) + 5(-j) = 2 + 3j - 4 - 5j = \mathbf{-2 - 2j}$$
+
+**Result $X[1, k]$:** $\{14, -2+2j, -2, -2-2j\}$
+
+---
+
+#### Observation
+Comparing $r=0$ and $r=1$, the AC components ($k=1, 2, 3$) remained identical because the "shape" of the ramp (a slope of 1) did not change, only its DC offset increased by 4 (the difference between $x[n]$ and $x[n-1]$ accumulated over 4 samples). This demonstrates how the STFT tracks spectral properties over time.
