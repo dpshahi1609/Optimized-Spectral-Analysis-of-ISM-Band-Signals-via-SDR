@@ -1,4 +1,4 @@
-# Documentation
+# Theory
 
 ## Table of Contents
 1. [USRP](#usrp)
