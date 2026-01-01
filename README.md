@@ -1,9 +1,14 @@
 # Optimized Spectral Analysis of ISM Band Signals via SDR
 
-## Abstract
+## Project Description
 
-The proliferation of wireless communication protocols, specifically IEEE 802.11 (Wi-Fi) and Bluetooth, necessitates robust spectrum monitoring and analysis tools. Software Defined Radios (SDRs) provide a flexible hardware platform for capturing these signals; however, direct-conversion receivers often introduce hardware impairments, most notably DC offset, while subsequent spectral analysis is prone to spectral leakage. This project presents a comprehensive signal processing pipeline for the analysis of captured RF signals using USRP hardware.
+This project presents a software-defined radio (SDR) framework for high-fidelity signal acquisition and spectral analysis. Utilizing the USRP B210 hardware and a Python-based processing engine, the system implements a dynamic signal conditioning pipeline. Key contributions include an automated Direct Current (DC) offset removal algorithm using a tunable Infinite Impulse Response (IIR) filter and an adaptive Short-Time Fourier Transform (STFT) mechanism. The spectral analysis engine dynamically computes Kaiser window parameters to satisfy strict attenuation ($78$ dB) and resolution ($25$ kHz) requirements, ensuring optimal visualization of Radio Frequency (RF) phenomena such as frequency hopping and transient bursts.
+## Resources 
 
-We propose two primary enhancement techniques to improve spectrogram fidelity. First, to address the inherent DC offset prevalent in zero-IF SDR architectures, we implement a first-order Infinite Impulse Response (IIR) DC blocker. This pre-processing stage effectively mitigates carrier feedthrough without distorting the near-DC frequency components of the target signal. Second, we analyze the Short-Time Fourier Transform (STFT) parameterization, specifically focusing on the trade-off between main-lobe width and side-lobe attenuation. We identify and propose an optimal Beta ($\beta$) value for the Kaiser window that maximizes dynamic range for Bluetooth and Wi-Fi signal detection. Experimental results demonstrate that the proposed processing chain significantly enhances spectral clarity, reduces noise floor artifacts, and improves the detection of transient packet headers in congested 2.4 GHz environments.
-
-**Keywords** — Software Defined Radio (SDR), Short-Time Fourier Transform (STFT), DC Offset Removal, Kaiser Window, Spectrogram, IIR Filter, Wi-Fi, Bluetooth.
+| Component | Description | Access File |
+| :--- | :--- | :--- |
+| **Source Code** | USRP Reciver Code | [View](src/usrp_rx.py) |
+| **Results** | file contains results | [View](results/results.md) |
+| **Code Documenatation** | Explaination of source code | [View](docs/code_documentation.md) |
+| **Mathematical Formulation** | Mathematical formulation and parameters | [View](results/results.md) |
+| **Theory** | Detailed explaination of each Theory realted to project | [View](docs/thoery.md) |
