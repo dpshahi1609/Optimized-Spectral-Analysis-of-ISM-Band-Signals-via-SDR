@@ -13,7 +13,7 @@ The spectrogram below illustrates the characteristic Frequency Hopping Spread Sp
 *Figure 1: Decimated time-domain amplitude of the captured signal.*
 
 ### Spectrogram (Frequency Domain)
-![Spectrogram - 2.472 GHz](images/Figure2.jpg)
+![Spectrogram - 2.472 GHz](images/FigureS2.pmg)
 *Figure 2: Spectrogram showing distinct frequency hopping bursts typical of Bluetooth communication.*
 
 ---
