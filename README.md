@@ -11,4 +11,4 @@ This project presents a software-defined radio (SDR) framework for high-fidelity
 | **Results** | Contains results | [View](results/results.md) |
 | **Code Documenatation** | Explaination of source code | [View](docs/code_documentation.md) |
 | **Mathematical Formulation** | Mathematical formulation and parameters | [View](docs/mathematical_formulation_and_system_parameters.md) |
-| **Theory** | Detailed explaination of each major topic realted to project | [View](docs/thoery.md) |
+| **Theory** | Detailed explaination of each major topic realted to project | [View](docs/theory.md) |
