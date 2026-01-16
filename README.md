@@ -2,7 +2,7 @@
 
 ## Project Description
 
-This project presents a software-defined radio (SDR) framework for high-fidelity signal acquisition and spectral analysis. Utilizing the USRP B210 hardware and a Python-based processing engine, the system implements a dynamic signal conditioning pipeline. Key contributions include an automated Direct Current (DC) offset removal algorithm using a tunable Infinite Impulse Response (IIR) filter and an adaptive Short-Time Fourier Transform (STFT) mechanism. The spectral analysis engine dynamically computes Kaiser window parameters to satisfy strict attenuation ($78$ dB) and resolution ($25$ kHz) requirements, ensuring optimal visualization of Radio Frequency (RF) phenomena such as frequency Hops and Bursts.
+Efficient signal capturing and spectral analysis play a pivotal role in modern wireless environments, particularly driven by AI/ML applications and Next Generation Networks. This project utilizes USRP hardware and the UHD Python API to facilitate signal acquisition and efficient Short-Time Fourier Transform analysis. Key contributions include an automated Direct Current offset removal using a tunable Infinite Impulse Response filter, alongside an adaptive STFT mechanism. The spectral analysis engine dynamically computes Kaiser window parameters to satisfy strict attenuation and resolution requirements, ensuring optimal visualization of Radio Frequency phenomena such as frequency hops and bursts
 ## Resources 
 
 | Component | Description | Access File |
