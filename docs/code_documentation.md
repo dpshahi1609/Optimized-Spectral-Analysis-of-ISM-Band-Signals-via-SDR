@@ -1,5 +1,6 @@
 # Table of Contents
 1. [Library Imports and Helper Functions](#[library-imports-and-helper-functions)
+2. [USRP Setup](#usrp-setup)
 
 --------------------
 ## Library Imports and Helper Functions
@@ -112,5 +113,97 @@ def calculate_settling_samples(alpha):
    * **`5 * tau`**: In signal processing theory, a system is considered "fully settled" (99.3% settled) after 5 time constants ($5\tau$).
    * **`np.ceil`**: Rounds the calculated number to the next whole number (you cannot discard a fraction of a sample).
    * **`int(...)`**: Converts the result to an integer so it can be used as an array index.
+
+---
+
+## USRP Setup
+
+### 1. Function Definition and Inputs
+
+**Code Snippet:**
+```python
+def setup_usrp(fc, fs, gain):
+    ...
+    return usrp
+```
+
+* **Why it is used:** To create a reusable block of code that allows you to easily change radio settings without rewriting the connection logic every time.
+* **Parameters (Inputs):**
+  * `fc` (float): **Center Frequency**. This controls the specific radio frequency the device will listen to (e.g., 915 MHz or 2.4 GHz).
+  * `fs` (float): **Sampling Rate**. This determines how many samples per second the device captures.
+  * `gain` (float): **Receive Gain**. This controls the amplification of the incoming analog signal (in dB).
+* **Outputs:** `return usrp`:
+  * **Why it is used:** Passes the configured `usrp` object back to the code that called this function.
+  * **Output:** The initialized and ready-to-use device object.
+
+---
+
+### 2. Device Connection and Error Handling
+
+**Code Snippet:**
+```python
+    print(f"[INFO] Connecting to USRP B210...")
+    try:
+        usrp = uhd.usrp.MultiUSRP("type=b200")
+        usrp.set_clock_source("internal")
+    except RuntimeError as e:
+        print(f"[CRITICAL] USRP Connection Failed: {e}")
+        print("Make sure the device is plugged in and recognized by 'uhd_find_devices'.")
+        raise
+```
+
+* `try: ... except RuntimeError as e:` Hardware initialization is prone to errors (e.g., device not plugged in, USB permission issues). This block attempts to run the code in the `try` section. If a specific error (`RuntimeError`) occurs, it jumps to the `except` block to handle it gracefully instead of crashing instantly with a cryptic message.
+* `usrp = uhd.usrp.MultiUSRP("type=b200")`:This is the primary class in the UHD library used to control USRP devices. This instructs the driver to look specifically for a B200-series device. If you have multiple B200s connected, this will pick the first one found. You can be more specific by adding a serial number: `"type=b200, serial=123456"`
+  * **Output:** The Python object usrp is created. This object is now your "handle" to the hardware. You will use usrp for all subsequent commands (setting frequency, gain, etc.).
+* `usrp.set_clock_source("internal")`: Sets the timing reference for the device. The B210 needs a clock to drive its oscillators. String `"internal"` (uses the device's built-in oscillator) or `"external"` (uses a cable connected to the 10MHz port).
+* `raise`: If the connection failed, the program cannot continue. This command re-triggers the error to stop the program after printing the helpful error message.
+
+---
+
+### 3. Advanced Tuning Configuration
+
+**Code Snippet:**
+```python
+    tune_req = uhd.types.TuneRequest(fc)
+    tune_req.args = uhd.types.DeviceAddr("mode_n=integer") 
+```
+
+* `uhd.types.TuneRequest(fc)`: This creates a TuneRequest object for a target frequency fc (e.g., $2.4 \text{ GHz}$).Normally, you might just pass the frequency as a float to set_center_freq, but creating a TuneRequest object allows you to pass advanced configuration options (like LO offsets or synthesis modes).
+
+* `uhd.types.DeviceAddr("mode_n=integer")`: This specific argument configures the synthesizer mode. By setting `mode_n=integer`, you force the hardware to use Integer-N mode generally provides better phase noise performance (cleaner signal) compared to Fractional-N mode, but it limits the tuning steps to integer multiples of the reference frequency. This is often preferred for high-quality signal reception.
+
+---
+
+### 4. Applying Radio Settings
+
+**Code Snippet:**
+```python
+    usrp.set_rx_rate(fs, 0)
+    usrp.set_rx_freq(tune_req, 0)
+    usrp.set_rx_gain(gain, 0)
+    usrp.set_rx_bandwidth(fs, 0)
+```
+
+All functions here share a common parameter format: `(Value, Channel Index)`.
+* **The Channel Parameter (`0`):** The USRP B210 has two receive channels (RX1 and RX2). The `0` specifies that these settings should apply to the (RX1). If you wanted to configure the second port, you would use `1`.
+
+**Detailed Breakdown:**
+* `usrp.set_rx_rate(fs, 0)`: Sets the sample rate of the Analog-to-Digital Converter (ADC) decimation chain. To define the speed at which data is sent from the USRP to the host computer.
+* `usrp.set_rx_freq(tune_req, 0)`: Tunes the radio frequency frontend. Instead of passing a simple float, we pass the `tune_req` object we created earlier to apply the "Integer-N" optimization.
+* `usrp.set_rx_gain(gain, 0)`: Sets the RF amplifier gain. To adjust signal amplitude.
+* `usrp.set_rx_bandwidth(fs, 0)`: Configures the analog low-pass filter on the device. This filters out noise and signals outside your interest *before* digitization. Setting this equal to `fs` (sample rate) is a standard practice to prevent aliasing, ensuring you only receive the bandwidth you can actually capture.
+
+---
+
+### 5. Stabilization and Return
+
+**Code Snippet:**
+```python
+    time.sleep(1.0)
+    return usrp
+```
+
+**Explanation of Logic:**
+* `time.sleep(1.0)`: Pauses the program execution for 1 second. When hardware parameters (especially the Local Oscillator frequency and analog filters) are changed, they take a small amount of time to "settle" or stabilize. Reading data immediately after tuning can result in garbage data or DC offsets. This delay ensures the hardware is stable before the main program starts reading data.
 
 ---
