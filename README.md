@@ -10,5 +10,4 @@ Efficient signal capturing and spectral analysis play a pivotal role in modern w
 | **Source Code** | USRP Reciver Code | [View](src/usrp_rx.py) |
 | **Results** | Contains results | [View](results/results.md) |
 | **Code Documenatation** | Explaination of source code | [View](docs/code_documentation.md) |
-| **Mathematical Formulation** | Mathematical formulation and parameters | [View](docs/mathematical_formulation_and_system_parameters.md) |
 | **Theory** | Detailed explaination of each major topic realted to project | [View](docs/theory.md) |
