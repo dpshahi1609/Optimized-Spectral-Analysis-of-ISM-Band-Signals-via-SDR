@@ -58,8 +58,7 @@ def calculate_optim_alpha(cutoff_hz, fs):
 * **Inputs:**
   * `cutoff_hz` (float): The frequency (in Hz) below which signals should be blocked.
   * `fs` (float): The sampling frequency (in Hz) of the system.
-* **Outputs:**
-  * `alpha` (float): A value between 0 and 1 (typically very close to 1.0) representing the pole location of the filter.
+* **Outputs:** `alpha` (float): A value between 0 and 1 (typically very close to 1.0) representing the pole location of the filter.
   
 
 **Logic & Mathematical Explanation:**
