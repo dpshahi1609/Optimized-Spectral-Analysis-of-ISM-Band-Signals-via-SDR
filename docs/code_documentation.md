@@ -1,6 +1,7 @@
 # Table of Contents
-1. [Library Imports and Helper Functions](#[library-imports-and-helper-functions)
+1. [Library Imports and Helper Functions](#library-imports-and-helper-functions)
 2. [USRP Setup](#usrp-setup)
+3. [Capture Samples](#capture-samples)
 
 --------------------
 ## Library Imports and Helper Functions
@@ -207,3 +208,164 @@ All functions here share a common parameter format: `(Value, Channel Index)`.
 * `time.sleep(1.0)`: Pauses the program execution for 1 second. When hardware parameters (especially the Local Oscillator frequency and analog filters) are changed, they take a small amount of time to "settle" or stabilize. Reading data immediately after tuning can result in garbage data or DC offsets. This delay ensures the hardware is stable before the main program starts reading data.
 
 ---
+
+## Capture Samples
+
+### **1. Function Definition and Target Calculation**
+
+This section defines the function and calculates exactly how many data points we need to collect based on the requested time duration.
+
+```python
+def capture_samples(usrp_dev, duration, fs):
+    num_samps_target = int(np.ceil(duration * fs))
+```
+
+#### **Parameters Explained**
+* **`usrp_dev`**: This is the handle object representing the physical USRP hardware. It allows the code to send commands to the specific radio connected to the computer.
+* **`duration`**: Defines how long (in seconds) the capture should last.
+* **`fs`**: Stands for "Sampling Frequency" (samples per second).
+
+#### **Logic Explanation**
+* **`duration * fs`**: This is a mathematical conversion from *Time domain* to *Sample domain*.
+   * *Example:* If you want 0.5 seconds of data (`duration`) at a rate of 1,000 samples/sec (`fs`), you need $0.5 \times 1000 = 500$ total samples.
+* **`np.ceil(...)`**: You cannot capture a fraction of a sample. If the math results in 500.2 samples, `ceil` (ceiling) rounds it up to 501 to ensure we cover the full duration.
+* **`int(...)`**: Hardware drivers require integer counts (whole numbers), not decimals.
+
+---
+
+### **2. Stream Configuration**
+
+Here, we tell the USRP how to format the data before sending it to the computer.
+
+```python
+    st_args = uhd.usrp.StreamArgs("fc32", "sc16")
+    streamer = usrp_dev.get_rx_stream(st_args)
+```
+
+#### **Special Objects Explained**
+* **`uhd.usrp.StreamArgs("fc32", "sc16")`**: This object tells the UHD driver how to format the data when moving it between the radio hardware and your computer's CPU.
+   * **Input 1 ("fc32"):** "Float Complex 32-bit". This tells the driver that your Python application wants to handle the data as complex numbers where the real and imaginary parts are 32-bit floating-point numbers.
+   * **Input 2 ("sc16"):** "Signed Complex 16-bit". This tells the USRP to send data over the cable (Ethernet or USB) as 16-bit signed integers. It halves the bandwidth required compared to sending 32-bit floats over the wire. The driver automatically converts these 16-bit integers into the "fc32" floats you requested for the CPU.
+* **`usrp_dev.get_rx_stream(st_args)`**: usrp_dev is assumed to be an instantiated `MultiUSRP` object (the connection to your physical radio). `get_rx_stream(st_args)` creates the actual RX Streamer object based on the arguments you defined above. You will use this `streamer` object later to issue streaming commands (like `stream_cmd`) and to actually receive the samples `using streamer.recv()`.
+
+---
+
+### **3. Buffer and Metadata Initialization**
+
+We need to prepare memory to catch the incoming data.
+
+```python
+    max_samps = streamer.get_max_num_samps()
+    recv_buffer = np.zeros((1, max_samps), dtype=np.complex64)
+    metadata = uhd.types.RXMetadata()
+```
+
+#### **Code Logic Explained**
+* **`streamer.get_max_num_samps()`**: The hardware transfers data in "packets" (chunks). This function queries the driver for the maximum number of samples that can fit in a single packet. Ensures our buffer is large enough to hold the largest possible incoming chunk.
+* **`np.zeros((1, max_samps), dtype=np.complex64)`** Pre-allocates a "bucket" (`recv_buffer`) to temporarily hold one chunk of incoming data.
+   * **Parameter `(1, max_samps)`:** Creates a 2D array (1 channel x max samples).
+   * **Parameter `dtype=np.complex64`:** Matches the "fc32" setting defined earlier.
+* **`uhd.types.RXMetadata()`**: Creates a container to hold information *about* the received data (e.g., timestamps, error codes) rather than the data itself.
+
+---
+
+### **4. Issuing the Stream Command**
+
+We command the hardware to start sending data.
+
+```python
+    stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.num_done)
+    stream_cmd.num_samps = num_samps_target
+    stream_cmd.stream_now = True
+    stream_cmd.time_spec = usrp_dev.get_time_now()
+
+    print(f"[INFO] Capturing {duration}s ({num_samps_target} samples)...")
+    streamer.issue_stream_cmd(stream_cmd)
+```
+
+* **`uhd.types.StreamCMD`**: This creates a command object. The key argument is StreamMode.num_done. This tells the USRP's FPGA: "I want you to send a specific number of samples and then stop automatically.". The other common mode is start_cont (Start Continuous), which streams indefinitely until told to stop.
+* **`stream_cmd.num_samps`**: This sets the exact integer number of samples the FPGA should send before halting. This corresponds strictly to the num_done mode set in the previous line. 
+* **`stream_cmd.stream_now = True`**: This instructs the USRP to execute this command as soon as it is received and processed by the FPGA, without waiting for a specific timestamp.
+* **`stream_cmd.time_spec = usrp_dev.get_time_now()`**:This sets a time for the command to execute.
+* **`streamer.issue_stream_cmd(stream_cmd)`**: This sends the configuration object over the transport (USB/Ethernet) to the radio hardware. Once the radio receives this, it will begin pushing data into the network buffer.
+* **Complete Block Logic**: The USRP turns on, sends exactly (`num_samps`) samples, and then automatically turns off (stops streaming). 
+---
+
+### **5. The Reception Loop (Core Logic)**
+
+Since the USRP sends data in small chunks (e.g., 2,000 samples at a time) but we might want 1,000,000 samples, we must use a loop to collect them all.
+
+```python
+    full_data = np.zeros(num_samps_target, dtype=np.complex64)
+    samps_received = 0
+    timeout_counter = 0
+
+    while samps_received < num_samps_target:
+        samps = streamer.recv(recv_buffer, metadata)
+```
+
+* **`full_data = np.zeros(...)`**: This is the "final destination" array large enough to hold the entire capture.
+* **`while samps_received < num_samps_target:`**: This loop continues to run as long as we haven't collected the total required samples.
+* **`streamer.recv(recv_buffer, metadata)`**: Tries to pull one packet of data from the driver into our temporary `recv_buffer`. The buffer to fill and the metadata object to update. (`samps`) Returns an integer representing how many samples were *actually* received in this specific chunk.
+
+---
+
+### **6. Error Handling in the Loop**
+
+We must check if the hardware reported any issues with the chunk we just received.
+
+```python
+        if metadata.error_code != uhd.types.RXMetadataErrorCode.none:
+            print(f"[ERROR] {metadata.strerror()}")
+            if metadata.error_code != uhd.types.RXMetadataErrorCode.overflow:
+                break
+```
+
+* **`metadata.error_code != ...none`**: Checks if the transaction was not successful.
+* **`overflow`**: This specific error means the computer was too slow to process the data, and the USRP internal buffer filled up and dropped data. The code prints an error but decides (via the `if` logic) whether to stop or continue.
+* **`break`**: If the error is not an overflow (e.g., a timeout or hardware failure), the loop is immediately terminated to prevent freezing.
+
+---
+
+### **7. Storing the Data**
+
+If data was received, copy it from the temporary buffer to the main array.
+
+```python
+        if samps > 0:
+            end_idx = min(samps_received + samps, num_samps_target)
+            count = end_idx - samps_received
+            full_data[samps_received:end_idx] = recv_buffer[0, :count]
+            samps_received += count
+            timeout_counter = 0
+```
+
+* **`end_idx = min(...)`**: Safety logic. If the USRP sends slightly more data than requested (rare but possible), `samps_received + samps` might exceed the size of `full_data`, causing a crash. `min` ensures we never calculate an index beyond the array size.
+* **`count = end_idx - samps_received`**: Calculates exactly how many samples from the current chunk fit into the remaining space of `full_data`.
+* **`full_data[samps_received:end_idx] = recv_buffer[0, :count]`**: Copies only the valid samples (`:count`) from the temp buffer into the correct position (`samps_received` to `end_idx`) in the main array.
+* **`samps_received += count`**: Updates our progress counter.
+
+---
+
+### **8. Handling Timeouts**
+
+If no data arrives, we increment a counter to avoid waiting forever.
+
+```python
+        else:
+            timeout_counter += 1
+            if timeout_counter > 1000:
+                print("[WARN] Timeout waiting for samples.")
+                break
+
+    print(f"[INFO] Capture Complete. Acquired {len(full_data)} samples.")
+    return full_data
+```
+
+* The `else` block executes specifically when `streamer.recv()` returns `0`, indicating no samples were received during that specific iteration.
+* The `timeout_counter` tracks consecutive "empty" reads. It resets to 0 whenever data is successfully received (in the `if` block above).
+* If the counter exceeds the threshold (1000 iterations), the loop is forcibly broken. This prevents the application from freezing on a lost connection.
+* Once the loop concludes (either via target reached or timeout), the function reports the total captured size and returns the NumPy array.
+
+---
+
