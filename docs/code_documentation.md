@@ -1,5 +1,5 @@
 # Table of Contents
-1.[Library Imports and Helper Functions](#[library-imports-and-helper-functions)
+1. [Library Imports and Helper Functions](#[library-imports-and-helper-functions)
 
 --------------------
 ## Library Imports and Helper Functions
