@@ -2,6 +2,7 @@
 1. [Library Imports and Helper Functions](#library-imports-and-helper-functions)
 2. [USRP Setup](#usrp-setup)
 3. [Capture Samples](#capture-samples)
+4. [DC Offset Removal](#dc-offset-removal)
 
 --------------------
 ## Library Imports and Helper Functions
@@ -369,3 +370,41 @@ If no data arrives, we increment a counter to avoid waiting forever.
 
 ---
 
+## DC Offset Removal
+
+```python
+    def apply_dc_blocker(samples, fs):
+        ...
+        return filtered[n_discard:]
+```
+* The function implements a standard First-Order IIR (Infinite Impulse Response) High-Pass Filter. It is designed to remove the 0 Hz component (DC offset) from a digital signal while leaving higher frequencies intact.
+* It takes `samples` and `fs` as Inputs.
+* Returns `filtered[n_discard:]` as output after discarding unsetteled samples.
+---
+ ```python
+     alpha = calculate_optim_alpha(DC_BLOCKER_CUTOFF_HZ, fs)
+     n_discard = calculate_settling_samples(alpha)
+```
+* `calculate_optim_alpha(DC_BLOCKER_CUTOFF_HZ, fs)` Calculates an Optimal alpha according to given sampling frequency and filter's cutoff frequency.
+* `calculate_settling_samples(alpha)` Calculates the no of samples needee to settel filter's response.
+---
+```python
+    if len(samples) < n_discard + 100:
+    print("[WARN] Data too short for this filter configuration!")
+    return samples
+```
+* If no of input samples`len(samples)` are shorter than setteling time `n_discard` then filtering it would destroy the entire signal. In this case, it aborts and returns the original data to prevent errors.
+---
+```python
+    b = [1, -1]
+    a = [1, -alpha]
+    filtered = lfilter(b, a, samples)
+    
+    return filtered[n_discard:]
+```
+
+* `lfilter` Function (from the scipy.signal library) to apply a linear digital filter to a set of data.
+* For an input signal $x[n]$ (your samples) and output signal $y[n]$ (your filtered variable), the operation is defined as:
+  * $$a[0]y[n] = b[0]x[n] + b[1]x[n-1] + ... + b[M]x[n-M] - a[1]y[n-1] - ... - a[N]y[n-N]$$ Usually, $a[0]$ is set to $1$. If it isn't, lfilter normalizes the coefficients by dividing them by $a[0]$.
+* In our case we have $$y[n] = x[n] - x[n-1] + \alpha \cdot y[n-1]$$. So according to above our filter cofficients should be `b = [1, -1]` and `a = [1, -alpha]`.
+---
