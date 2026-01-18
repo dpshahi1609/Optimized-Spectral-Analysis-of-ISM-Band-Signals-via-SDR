@@ -3,6 +3,8 @@
 2. [USRP Setup](#usrp-setup)
 3. [Capture Samples](#capture-samples)
 4. [DC Offset Removal](#dc-offset-removal)
+5. [IQ Data Visualization](#iq-data-visualization)
+6. [STFT Calculation And Visualization](#stft-calculation-and-visualization)
 
 --------------------
 ## Library Imports and Helper Functions
@@ -407,4 +409,281 @@ If no data arrives, we increment a counter to avoid waiting forever.
 * For an input signal $x[n]$ (your samples) and output signal $y[n]$ (your filtered variable), the operation is defined as:
   * $$a[0]y[n] = b[0]x[n] + b[1]x[n-1] + ... + b[M]x[n-M] - a[1]y[n-1] - ... - a[N]y[n-N]$$ Usually, $a[0]$ is set to $1$. If it isn't, lfilter normalizes the coefficients by dividing them by $a[0]$.
 * In our case we have $$y[n] = x[n] - x[n-1] + \alpha \cdot y[n-1]$$. So according to above our filter cofficients should be `b = [1, -1]` and `a = [1, -alpha]`.
+---
+## IQ Data Visualization
+
+### 1. Function Declaration and Parameters
+
+**Code Snippet:**
+```python
+def plot_time_domain(iq_data, fs, label):
+```
+
+* **`iq_data` (Input Parameter):** This is the raw signal data you want to analyze. In Digital Signal Processing (DSP), this is typically a NumPy array of complex numbers (In-phase and Quadrature components). The length of this array determines the duration of the signal shown, and the values determine the height (amplitude) of the wave.
+* **`fs` (Input Parameter):** It is required to convert the "sample index" (just a number like 0, 1, 2) into actual "time" (seconds). A higher `fs` means samples are closer together in time.
+* **`label` (Input Parameter):** A string text used to name the specific dataset. It appears in the chart title to help the viewer identify which signal is being displayed.
+
+---
+
+### 2. Data Decimation Logic
+
+**Code Snippet:**
+```python
+    decimation = 100 
+    subset = iq_data[::decimation]
+```
+
+**Explanation:**
+This block reduces the number of points to be plotted. Plotting millions of points is slow and visually indistinguishable on a computer screen.
+
+* **`decimation = 100`:** Defines a factor to reduce the dataset size. It sets a variable to 100, meaning we will only keep 1 out of every 100 samples.
+* **`subset = iq_data[::decimation]`:** To create a smaller, manageable array for plotting. This uses Python's list slicing syntax `[start:stop:step]`. By using `::100`, it starts at the beginning, goes to the end, but skips 99 items, picking only every 100th item. If `iq_data` had 1,000,000 points, `subset` will have only 10,000 points.
+
+---
+
+### 3. Time Axis Calculation (Mathematical Logic)
+
+**Code Snippet:**
+```python
+    t = np.arange(len(subset)) * decimation / fs
+```
+
+**Explanation:**
+Since we removed data points (decimated), we cannot just assume the time is 0, 1, 2... We must calculate the correct physical time (in seconds) for the remaining points.
+
+* **`np.arange(len(subset))`:** Generates a sequence of integers from 0 up to the number of points in our subset.
+   * **Input** `len(subset)` (the count of remaining points).
+   * **Outputs:** An array like `[0, 1, 2, ..., N]`.
+* **`* decimation`:** Because we skipped points, the "real" index of the $k$-th point in the subset is actually $k \times 100$. This restores the original sample index.
+* **`/ fs`:** To convert "sample count" to "seconds", we divide by the sampling rate ($f_s$).
+            $$t = \frac{\text{Index} \times \text{Decimation Factor}}{f_s}$$
+
+---
+
+### 4. Setting up the Figure
+
+**Code Snippet:**
+```python
+    plt.figure(figsize=(10, 3))
+```
+
+* **`plt.figure`:** Initializes a new container (window) for the visualization. To ensure this plot does not overlap with previous plots and to define the image dimensions.
+* **`figsize=(10, 3)` (Parameter):** Specifies the width and height of the figure in inches. `(10, 3)` creates a wide, short rectangle. This is ideal for time-domain signals because it allows you to see a long duration of time horizontally without wasting vertical space.
+
+---
+
+### 5. Plotting the Waveform
+
+**Code Snippet:**
+```python
+    plt.plot(t, np.abs(subset), label='Magnitude', color='#004488', linewidth=0.8)
+```
+
+* **`np.abs(subset)` (Special Function):** `iq_data` contains complex numbers ($I + jQ$). You cannot plot complex data directly on a 2D Y-axis w.r.t to time. We need the "Magnitude".
+   * **Logic:** It calculates the Euclidean distance from the origin: $\text{Magnitude} = \sqrt{I^2 + Q^2}$.
+   * **Input:** Array of complex numbers.
+   * **Output:** Array of real, positive floating-point numbers.
+* **`plt.plot` Function:** draws lines connecting the data points.
+   * **`t` (Input):** The X-axis coordinates (Time).
+   * **`np.abs(subset)` (Input):** The Y-axis coordinates (Amplitude).
+   * **`color='#004488'` (Parameter):** Uses a specific Hex code for a dark blue color. This affects the aesthetics, making it look professional.
+   * **`linewidth=0.8` (Parameter):** Sets the thickness of the line. A thinner line (0.8) is used here to make the signal look crisp rather than "blobby," especially with dense data.
+
+---
+
+### 6. Labels and Formatting
+
+**Code Snippet:**
+```python
+    plt.title(f"Time Domain (Decimated) - {label}")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Amplitude")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+```
+
+* **`plt.title(...)`:** Uses an f-string to insert the `label` variable dynamically into the title text. Provides context to the viewer about what the graph represents.
+* **`plt.xlabel` / `plt.ylabel`:** Labels the axes with units (Seconds for X, Amplitude for Y) so the data is scientifically meaningful.
+* **`plt.grid(True, alpha=0.3)`:** Draws a grid behind the plot to make it easier to estimate values visually.
+   * **`alpha=0.3` (Parameter):** Sets the transparency. `0.3` means 30% opaque. This ensures the grid is visible but faint enough not to distract from the main signal line.
+* **`plt.tight_layout()`:** An automatic adjustment function that fixes padding. Prevents axis labels or titles from being cut off by the edge of the image.
+* **`plt.show()`:** The command to actually render and display the window to the user.
+---
+## STFT Calculation And Visualization
+
+### 1. Function Overview & Inputs
+
+This function performs a **Short-Time Fourier Transform (STFT)** manually to analyze the frequency content of a signal over time and visualizes the result as a spectrogram.
+
+**Code Snippet:**
+```python
+def compute_and_plot_block_stft(data, fs, fc, label):
+    print("[INFO] Computing STFT...")
+```
+
+**Function Parameters:**
+* `data` (**Input Array**): The raw signal data (likely complex I/Q samples) to be analyzed.
+* `fs` (**Float**): The **Sampling Frequency** in Hz.
+* `fc` (**Float**): The **Center Frequency** in Hz.
+* `label` (**String**): A text label used in the plot title to identify the signal.
+
+---
+
+### 2. Kaiser Window Parameter ($\beta$) Calculation
+
+This section calculates the $\beta$ (beta) parameter required for generating a **Kaiser Window**. The Kaiser window is a mathematical function used to reduce "spectral leakage" (noise bleeding into adjacent frequencies) during the Fourier Transform.
+
+
+
+**Code Snippet:**
+```python
+    Asl = TARGET_ATTENUATION_DB
+    
+    if Asl > 60:
+        beta_val = 0.12438 * (Asl + 6.3)
+    elif Asl > 13.26:
+        beta_val = 0.76609 * (Asl - 13.26)**0.4 + 0.09834 * (Asl - 13.26)
+    else:
+        beta_val = 0.0
+```
+
+**Logic Explanation:**
+* `Asl = TARGET_ATTENUATION_DB`: This variable sets the desired side-lobe attenuation in decibels (dB). This implements the standard empirical piecewise formula for the Kaiser window $\beta$ parameter based on the desired attenuation ($A$):
+
+
+---
+
+### 3. Window Length Calculation (`n_fft`)
+
+This block calculates the optimal size of the FFT (Fast Fourier Transform) window to achieve a specific frequency resolution.
+
+**Code Snippet:**
+```python
+    delta_ml = 2 * np.pi * (TARGET_RESOLUTION_HZ / fs)
+    numerator = 24 * np.pi * (Asl + 12)
+    denominator = 155 * delta_ml
+    n_fft_calc = (numerator / denominator) + 1
+    n_fft = int(np.ceil(n_fft_calc))
+    if n_fft % 2 != 0: n_fft += 1
+```
+
+**Logic Explanation:**
+* Calculates the optimal size of the FFT (Fast Fourier Transform) window to achieve a specific frequency resolution according to $$N_{calc} = \frac{24\pi (A_{sl} + 12)}{155 \cdot 2\pi \frac{\Delta f}{f_s}} + 1$$
+* `delta_ml`: Calculates the normalized transition width in radians. It converts the user's desired resolution (`TARGET_RESOLUTION_HZ`) relative to the sample rate `fs`.
+* `numerator` / `denominator`: These lines implement the Kaiser filter order estimation formula. It estimates how many samples (`n_fft`) are needed to achieve the target resolution and attenuation.
+* `n_fft = int(np.ceil(n_fft_calc))`: The result is rounded up to the nearest integer because array sizes must be whole numbers.
+* `if n_fft % 2 != 0`: This ensures `n_fft` is an **even number**.
+  * `**Why?**` Many FFT algorithms operate more efficiently on even numbers, and it simplifies calculating center points and overlaps.
+
+---
+
+### 4. Window Generation and Buffer Setup
+
+Here, the code creates the window object and prepares the empty matrix (buffer) that will hold the final spectrogram image.
+
+**Code Snippet:**
+```python
+    hop_length = n_fft // 2
+    window = np.kaiser(n_fft, beta=beta_val)
+
+    n_samples = len(data)
+    n_frames = (n_samples - n_fft) // hop_length + 1
+    
+    if n_frames <= 0:
+        print("[ERROR] Data too short for analysis.")
+        return
+
+    spectrogram_data = np.zeros((n_fft, n_frames), dtype=np.float32)
+```
+
+**Special Functions & Objects:**
+* `hop_length = n_fft // 2`: This defines a **50% overlap**. The window slides forward by half its length each step. Overlapping ensures we don't lose data at the edges of the window where the signal is tapered to zero.
+* `np.kaiser(n_fft, beta=beta_val)`:
+  * **Why used:** To generate the window coefficients.
+  * **Inputs:** Length of the window (`n_fft`) and the shape parameter (`beta`).
+  * **Output:** An array of shape `(n_fft,)` containing numbers between 0 and 1. This will be multiplied by the signal to taper the edges to zero.
+* `len(data)`: Simply counts the total number of data points (samples) in your input signal array data.
+*  `n_frames`: Calculates mathematically how many "steps" fit into the total data length `n_samples`.
+*  `if n_frames <= 0:`: f your input `data` is shorter than a single window size (n_fft), you cannot perform even one Fourier Transform. n_frames would be zero or negative, so the code stops to prevent a crash later.
+* `np.zeros(...)`: Initializes a matrix of zeros.
+   * **Why used:** Pre-allocating memory is faster than growing a list inside a loop.
+   * **Inputs:** Shape `(rows, columns)` and data type. Here, rows are frequency bins (`n_fft`) and columns are time steps (`n_frames`).
+
+---
+
+### 5. The STFT Processing Loop
+
+This is the core engine of the function. It processes the signal one "chunk" at a time.
+
+
+
+**Code Snippet:**
+```python
+    for i in range(n_frames):
+        start = i * hop_length
+        end = start + n_fft
+        chunk = data[start:end]
+        windowed = chunk * window
+        fft_res = np.fft.fft(windowed)
+        fft_shifted = np.fft.fftshift(fft_res)
+        mag_db = 20 * np.log10(np.abs(fft_shifted) + 1e-12)
+        spectrogram_data[:, i] = mag_db
+```
+
+**Logic Explanation (Line by Line):**
+
+* `start` / `end`: Calculates the indices to slice the current segment of data.
+* `chunk = data[start:end]`: Extracts the raw signal for this specific time slice.
+* `windowed = chunk * window`: Applies the Kaiser window.
+    * **How it works:** Element-wise multiplication. This smooths the signal at the boundaries to prevent spectral artifacts.
+* `fft_res = np.fft.fft(windowed)`: Converts the signal from Time Domain (amplitude vs time) to Frequency Domain (amplitude vs frequency).
+   * **Input:** Time-series array.
+   * **Output:** Array of Complex numbers representing frequency components.
+* `fft_shifted = np.fft.fftshift(fft_res)`: Standard FFT outputs frequencies in the order [0...Pos...Neg]. `fftshift` rearranges them to [-Neg...0...Pos], placing 0Hz (DC) in the center.
+* `mag_db = 20 * np.log10(...)`: Converts magnitude to the **Decibel (dB)** scale.
+   * `np.abs(fft_shifted)`: Calculates magnitude of the complex numbers ($\sqrt{real^2 + imag^2}$).
+   * `+ 1e-12`: Adds a tiny number (epsilon) to prevent a "Divide by Zero" error if the magnitude is exactly 0 (since $\log(0)$ is undefined).
+   * `20 * ...`: Standard scaling factor for field quantities (like voltage) to dB.
+* `spectrogram_data[:, i] = mag_db`: Stores the result in the pre-allocated matrix. The `:` indicates all frequency rows, `i` is the current time column.
+
+---
+
+### 6. Visualization (Plotting)
+
+This section renders the calculated data as a heatmap.
+
+**Code Snippet:**
+```python
+    duration = n_samples / fs
+    freq_min = (fc - fs/2) / 1e6
+    freq_max = (fc + fs/2) / 1e6
+    
+    plt.figure(figsize=(12, 6))
+    plt.imshow(spectrogram_data, 
+               aspect='auto', 
+               origin='lower', 
+               extent=[0, duration, freq_min, freq_max],
+               cmap='inferno',
+               interpolation='nearest')
+
+    plt.colorbar(label='Power (dB)')
+    plt.title(f"Spectrogram | {label}\nRes: {TARGET_RESOLUTION_HZ/1000} kHz | Cutoff: {DC_BLOCKER_CUTOFF_HZ/1000} kHz") 
+    plt.xlabel("Time (s)")
+    plt.ylabel("Frequency (MHz)")
+    plt.tight_layout()
+    plt.show()
+```
+
+* `n_samples / fs`: Calculates the total length of the Signal in seconds.
+* `freq_min` / `freq_max`: Calculates the physical frequency range for the Y-axis. It centers the view around `fc` (Center Frequency) and spans half the sample rate (`fs/2`) in both directions. Division by `1e6` converts Hz to MHz.
+* `plt.figure(figsize=(12, 6))`: Creates the drawing canvas. Sets the size to 12 inches wide by 6 inches tall.
+* `plt.imshow`: This is the core command that draws the 2D array (spectrogram_data) as an image. The arguments control how that data is interpreted.
+   * `aspect='auto'`: By default, imshow tries to keep pixels square. Since spectrograms usually have many more time steps than frequency bins (or vice versa), forcing square pixels would squash the plot into a thin line. auto allows the aspect ratio to stretch to fill the figure area.
+   * `origin='lower'`: By default, image arrays start at the top-left (like a photograph). In science, the Y-axis (Frequency) should start at the bottom (low frequency) and go up. This flips the vertical axis so low frequencies are at the bottom.
+   * `extent=[0, duration, freq_min, freq_max]`: his maps the abstract array pixels to the real-world units calculated in Part 1. **Format:** `[x_min, x_max, y_min, y_max]`. It tells the plot: "The left edge is 0 seconds, the right edge is duration seconds, the bottom edge is freq_min, and the top edge is freq_max."
+   * `cmap='inferno'`: Sets the color map. inferno is a perceptually uniform colormap that goes from black (low power) to red/yellow (high power). It is excellent for dark backgrounds and printing.
+   * `interpolation='nearest'`: nearest means "don't blur." It renders sharp pixels. This is preferred for scientific data so you see the raw resolution rather than a smoothed, potentially misleading image.
+* `plt.colorbar(label='Power (dB)')`: Adds the color legend on the side showing which color corresponds to which decibel (dB) level.
+
 ---
