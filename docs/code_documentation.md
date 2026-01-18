@@ -5,6 +5,7 @@
 4. [DC Offset Removal](#dc-offset-removal)
 5. [IQ Data Visualization](#iq-data-visualization)
 6. [STFT Calculation And Visualization](#stft-calculation-and-visualization)
+7. [Run Experiment And Main](#run-experiment-and-main)
 
 --------------------
 ## Library Imports and Helper Functions
@@ -687,3 +688,138 @@ This section renders the calculated data as a heatmap.
 * `plt.colorbar(label='Power (dB)')`: Adds the color legend on the side showing which color corresponds to which decibel (dB) level.
 
 ---
+Here is the documentation for your USRP (Universal Software Radio Peripheral) project code. This code is designed to capture radio frequency signals and perform signal processing tasks like time-domain plotting and Short-Time Fourier Transform (STFT) analysis.
+
+---
+## Run Experiment And Main
+
+### **Part 1: Run Experiment Function**
+
+The function `run_experiment` is the core logic that configures the hardware for a specific test case, captures data, and triggers analysis.
+
+### **1. Function Definition & Logging**
+
+```python
+def run_experiment(usrp, fc, bw, dwell, label):
+    print(f"\n[TASK] Starting Run: {label}")
+```
+
+* **`def run_experiment(...)`**: To encapsulate a single "run" of data capture and analysis so it can be repeated with different settings.
+   * **Inputs:**
+      * `usrp`: The initialized USRP device object (controls the hardware).
+      * `fc`: Center Frequency in Hz (float).
+      * `bw`: Bandwidth in Hz (float).
+      * `dwell`: Time in seconds to record (float).
+      * `label`: A string used to name plots or logs (e.g., "2.4GHz_BW20M").
+   * **Output:** it performs actions and plots data.
+
+---
+
+### **2. Configuring the USRP Hardware**
+
+```python
+    usrp.set_rx_rate(bw, 0)
+    usrp.set_rx_freq(uhd.types.TuneRequest(fc), 0)
+    usrp.set_rx_bandwidth(bw, 0)
+```
+
+* This section configures the radio hardware. These methods are part of the UHD (USRP Hardware Driver) API.
+
+---
+
+### **3. Stabilization & Capture**
+
+```python
+    time.sleep(1.0) 
+    
+    iq_data = capture_samples(usrp, dwell, bw)
+```
+
+* `time.sleep(1.0)`: Hardware tuning (PLL locking) takes time. If you capture immediately after setting the frequency, the signal might be unstable or garbage. Pauses execution for 1 second.
+* `capture_samples(usrp, dwell, bw)`: This is a helper function (Already defined) that streams raw IQ data from the USRP to the computer's memory.
+
+---
+
+### **4. Validation & Processing Logic**
+
+```python
+    if len(iq_data) > 2000:
+        iq_clean = apply_dc_blocker(iq_data, fs=bw)
+        
+        plot_time_domain(iq_clean, bw, label)
+        compute_and_plot_block_stft(iq_clean, bw, fc, label)
+    else:
+        print("[ERROR] Not enough data captured.")
+```
+
+* `if len(iq_data) > 2000:` Ensures we actually received valid data. If the buffer is empty or too small, processing it would crash the programe.
+* `iq_clean = apply_dc_blocker(iq_data, fs=bw)` / `plot_time_domain(iq_clean, bw, label)` / `compute_and_plot_block_stft(iq_clean, bw, fc, label)`: these are some predefined helper functions which are now used for a single run.
+---
+
+## **Part 2: The Main Execution Block**
+
+This section handles the user interface, input validation, and the main program loop.
+
+### **1. Entry Point & Setup**
+
+```python
+if __name__ == "__main__":
+    try:
+        usrp_dev = setup_usrp(2440e6, 20e6, 30)
+```
+
+* `if __name__ == "__main__":` Standard Python practice. It ensures this code runs only if the file is executed directly, not if it's imported as a module.
+* `setup_usrp(2440e6, 20e6, 30)` Initializes the connection to the USRP device before we start the loop. The values 2440e6 and 20e6 in that line are dummy values. They are used solely to get the device into a "Ready" state. They will be immediately overwritten by whatever you type into the input() prompt before any actual data is recorded.
+
+---
+
+### **2. User Interface Loop**
+
+```python
+        while True:
+            print("\n--- NEW EXPERIMENT ---")
+            try:
+                raw_fc = float(input("Enter Center Freq (GHz) [0 to Exit]: "))
+                if raw_fc == 0: break
+                
+                raw_bw = float(input("Enter Bandwidth (MHz) [Default 20]: ") or 20)
+                dwell = float(input("Enter Dwell Time (s) [Default 1.0]: ") or 1.0)
+            
+            except ValueError:
+                print("Invalid Input. Please enter numbers.")
+                continue
+```
+
+* `while True:` Creates an infinite loop so the user can run multiple experiments without restarting the script. `input` pauses the program and waits for the user to type. `float` tries to convert that text to a number.
+* `if raw_fc == 0: break` Provides a clean way to exit the infinite loop.
+* `or 20` inside `float(...)` Handles default values. If the user just hits "Enter" (empty string), Python evaluates `"" or 20`, resulting in 20.
+* `try... except ValueError:` Prevents the program from crashing if the user types "abc" instead of a number. If conversion fails, it prints an error and uses `continue` to jump back to the start of the `while` loop.
+
+---
+
+### **3. Unit Conversion & Execution**
+
+```python
+            fc = raw_fc * 1e9
+            bw = raw_bw * 1e6
+            label = f"{raw_fc}GHz_BW{raw_bw}M"
+            
+            run_experiment(usrp_dev, fc, bw, dwell, label)
+```
+
+* `fc = raw_fc * 1e9` / `bw = raw_bw * 1e6` Unit Conversion
+* `run_experiment(...)` Passes the newly calculated parameters and the existing USRP device to the experiment logic explained in Part 1.
+
+---
+
+### **4. Global Error Handling**
+
+```python
+    except KeyboardInterrupt:
+        print("\n[INFO] User stopped the script.")
+    except Exception as e:
+        print(f"\n[CRITICAL ERROR] {e}")
+```
+
+* `except KeyboardInterrupt:` Handles the `Ctrl+C` command gracefully. Instead of showing a messy "Traceback" error, it prints a polite exit message.
+* `except Exception as e:` Catch-all for unexpected hardware errors (e.g., USRP unplugged). `e` is the exception object containing the error details. Prints the critical error message so the user knows what went wrong.
